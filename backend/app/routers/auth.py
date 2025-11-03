@@ -11,4 +11,4 @@ ph = PasswordHasher()
     
 
 @router.post("/register")
-    #ulozenie uzivatela do DB
+    
