@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from typing import Optional
 
 # DB representation
-class User(SQLmodel, table = True): __tablename__ = "users" 
+class User(SQLmodel, table = True):
+    __tablename__ = "users" 
     id: int | None = Field(default = None, primary_key = True)
     name: str
     password: str
@@ -19,6 +20,11 @@ class UserCreate(SQLModel):
 class UserPublic(SQLModel):
     id: int
     name: str
+
+class UserRead(SQLModel):
+    id: int
+    name: str
+    is_admin: bool
 
 class Device(SQLModel, table = True):
     __tablename__ = "devices"
