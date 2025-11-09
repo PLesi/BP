@@ -1,29 +1,42 @@
 from sqlmodel import Field, SQLModel, create_engine
 from sqlalchemy import func, Column, TIMESTAMP
+from pydantic import field_validator
 from datetime import datetime, timezone
 from typing import Optional
 
+
 # DB representation
-class User(SQLmodel, table = True):
+class User(SQLModel, table = True):
     __tablename__ = "users" 
     id: int | None = Field(default = None, primary_key = True)
-    name: str
+    email: str
     password: str
-    is_admin: bool
+    is_admin: bool = Field(default=False)
 
 # What api recieve
 class UserCreate(SQLModel):
-    name: str
+    email: str
     password: str
+
+class UserRegister(SQLModel):
+    email: str
+    password: str
+    password_confirm: str
+
+    @field_validator('password_confirm')
+    def password_match(cls, value, info):
+        if 'password' in info.data and value != info.data['password']:
+            raise ValueError("Passwords do not match")
+        return value
 
 # What api return
 class UserPublic(SQLModel):
     id: int
-    name: str
+    email: str
 
 class UserRead(SQLModel):
     id: int
-    name: str
+    email: str
     is_admin: bool
 
 class Device(SQLModel, table = True):
@@ -42,10 +55,10 @@ class DevicePublic(SQLModel):
     port: int
 
 class Config(SQLModel, table = True):
-    __tablename__ = "congfigs"
+    __tablename__ = "configs"
     id: int | None = Field(default = None, primary_key = True)
     name: str
-    device_id: int = Field(foreign_key="device.id")
+    device_id: int = Field(foreign_key="devices.id")
 
 class ConfigCreate(SQLModel):
     name: str
@@ -61,7 +74,7 @@ class Input(SQLModel, table = True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     type: str
-    config_id: int = Field(foreign_key="config.id")
+    config_id: int = Field(foreign_key="configs.id")
 
 class InputCreate(SQLModel):
     name: str
@@ -79,7 +92,7 @@ class Output(SQLModel, table = True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     type: str
-    config_id: int = Field(foreign_key="config.id")
+    config_id: int = Field(foreign_key="configs.id")
 
 class OutputCreate(SQLModel):
     name: str
@@ -101,8 +114,8 @@ class Experiment(SQLModel, table = True):
     duration: int
     sample_time: int
     outh_path: str
-    device_id: int = Field(foreign_key="device.id")
-    user_id: int = Field(foreign_key="user.id")
+    device_id: int = Field(foreign_key="devices.id")
+    user_id: int = Field(foreign_key="users.id")
 
 class ExperimentCreate(SQLModel):
     name: str

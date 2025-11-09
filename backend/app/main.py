@@ -1,14 +1,15 @@
 from fastapi import FastAPI
-from backend.app.db import init_db, add_user
-from . import models
-from models import User
+from contextlib import asynccontextmanager
+from .db import init_db
+from .routers import users, auth
 
-
-app = FastAPI()
-
-@app.on_event("startup")
-async def on_startup():
+async def lifespan(app: FastAPI):
     await init_db()
+    yield
+    print("end")
 
+app = FastAPI(lifespan=lifespan)
 
+app.include_router(users.router)
+app.include_router(auth.router)
 
