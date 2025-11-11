@@ -1,6 +1,6 @@
 from sqlmodel import Field, SQLModel, create_engine
 from sqlalchemy import func, Column, TIMESTAMP
-from pydantic import field_validator
+from pydantic import field_validator, BaseModel
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -134,9 +134,6 @@ class ExperimentPublic(SQLModel):
     outh_path: str
     device_id: int
     user_id: int
-
-
-
 
 
 

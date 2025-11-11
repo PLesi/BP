@@ -1,5 +1,6 @@
-from fastapi import Depends, APIRouter
+from fastapi import Depends, APIRouter, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from ..models import User, UserPublic, UserCreate
 from ..db import get_session
 
@@ -12,3 +13,4 @@ async def create_user(user: UserCreate, session: AsyncSession = Depends(get_sess
     await session.commit()
     await session.refresh(db_user)
     return db_user    
+
