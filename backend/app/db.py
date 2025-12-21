@@ -1,10 +1,10 @@
-from sqlmodel import Field, SQLModel, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 from os import getenv
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI
-from .models import User, UserCreate, UserPublic
+
+from sqlmodel import SQLModel
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+
 
 load_dotenv()
 
