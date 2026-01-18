@@ -145,3 +145,11 @@ class OutputCreate(BaseModel):
     config_id: int
     type: str
     name: str
+
+
+# Request model for experiments
+class ExperimentRun(BaseModel):
+    device_id: int
+    input_values: dict[str, int | float | bool]
+    period: int
+    frequency: int

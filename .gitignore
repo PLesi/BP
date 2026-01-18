@@ -2,3 +2,18 @@
 .documentation/
 .tests/
 .venv/
+
+# Test scripts
+create_test_data.py
+test_experiment.py
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Experiment outputs
+experiment_*.json
+*.log

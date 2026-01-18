@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 from .db import init_db
-from .routers import devices, configs, software, inputs, outputs
+from .routers import devices, configs, software, inputs, outputs, experiments
 
 async def lifespan(app: FastAPI):
     await init_db()
@@ -16,3 +16,4 @@ app.include_router(configs.router)
 app.include_router(software.router)
 app.include_router(inputs.router)
 app.include_router(outputs.router)
+app.include_router(experiments.router)
