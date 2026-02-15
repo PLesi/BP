@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .db import init_db
 from .routers import devices, configs, software, inputs, outputs, experiments
@@ -9,6 +10,15 @@ async def lifespan(app: FastAPI):
     print("end")
 
 app = FastAPI(lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # V produkcii použite konkrétne domény
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Register all routers
 app.include_router(devices.router)

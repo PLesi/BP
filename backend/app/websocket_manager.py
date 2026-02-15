@@ -1,65 +1,32 @@
-"""
-WebSocket manager for broadcasting experiment results
-"""
 from fastapi import WebSocket
-from typing import Dict, Set
+from typing import Dict
 import json
+import redis
 
+redis_client = redis.Redis(host='localhost', port=6379, decode_responses=True)
 
-class WebSocketManager:
-    """Manages WebSocket connections and broadcasts"""
-    
+class WebSocketManager:    
     def __init__(self):
-        # Dictionary mapping task_id to set of connected websockets
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
-        # All connections for broadcast
-        self.all_connections: Set[WebSocket] = set()
-    
-    async def connect(self, websocket: WebSocket, task_id: str = None):
-        """Accept new WebSocket connection"""
+        self.connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, task_id: str):
         await websocket.accept()
-        self.all_connections.add(websocket)
-        
-        if task_id:
-            if task_id not in self.active_connections:
-                self.active_connections[task_id] = set()
-            self.active_connections[task_id].add(websocket)
-    
-    def disconnect(self, websocket: WebSocket, task_id: str = None):
-        self.all_connections.discard(websocket)
-        
-        if task_id and task_id in self.active_connections:
-            self.active_connections[task_id].discard(websocket)
-            if not self.active_connections[task_id]:
-                del self.active_connections[task_id]
-    
-    async def send_to_task_subscribers(self, task_id: str, message: dict):
-        """Send message to all clients subscribed to specific task_id"""
-        if task_id in self.active_connections:
-            disconnected = set()
-            for websocket in self.active_connections[task_id]:
-                try:
-                    await websocket.send_json(message)
-                except Exception:
-                    disconnected.add(websocket)
-            
-            # Clean up disconnected clients
-            for websocket in disconnected:
-                self.disconnect(websocket, task_id)
-    
-    async def broadcast(self, message: dict):
-        """Broadcast message to all connected clients"""
-        disconnected = set()
-        for websocket in self.all_connections:
-            try:
-                await websocket.send_json(message)
-            except Exception:
-                disconnected.add(websocket)
-        
-        # Clean up disconnected clients
-        for websocket in disconnected:
-            self.all_connections.discard(websocket)
+        self.connections[task_id] = websocket
+        print(f"🔌 WebSocket connected for task {task_id}")
 
-
-# Global WebSocket manager instance
+    async def disconnect(self, websocket: WebSocket, task_id: str):
+        if task_id in self.connections:
+            del self.connections[task_id]
+            print(f"🔌 WebSocket disconnected for task {task_id}")
+    
+    async def send_message(self, task_id: str, message: dict):
+        """Send message directly if WS is in this process, otherwise publish to Redis"""
+        if task_id in self.connections:
+            print(f"📤 Sending message to WebSocket: {message}")
+            await self.connections[task_id].send_json(message)
+        else:
+            # WebSocket not in this process, publish to Redis
+            print(f"📡 Publishing to Redis channel ws:{task_id}")
+            redis_client.publish(f"ws:{task_id}", json.dumps(message))
+    
 ws_manager = WebSocketManager()
