@@ -166,21 +166,22 @@ def calculate_estimated_wait_time(device_id: int, task_id: str):
     total_wait_time = 0
     found = False
 
+    # If device is currently locked, add time for the running task
+    if is_locked:
+        total_wait_time += 60
+
     for idx, task_json in enumerate(queued_tasks):
         try: 
             task = json.loads(task_json)
-            if task.get(task_id) == task_id:
+            if task.get('task_id') == task_id:
                 queue_position = idx + 1
                 found = True
                 break
             total_wait_time += task.get('period', 60)
         except json.JSONDecodeError:
             total_wait_time += 60
-    
-    if is_locked and found:
-        total_wait_time += 60
 
-    return{
+    return {
         "queue_position": queue_position,
         "estimated_wait_time": total_wait_time
     }
