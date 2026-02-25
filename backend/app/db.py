@@ -8,8 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 load_dotenv()
 
-file_name = "lab"
-database_url = f"{getenv("DATABASE_URL")}{file_name}" 
+database_url = f"{getenv("DATABASE_URL")}" 
 DATABASE_URL = database_url  
 
 
