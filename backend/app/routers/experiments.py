@@ -7,7 +7,7 @@ import asyncio
 from ..models import ExperimentRun
 from ..db import get_session
 from ..websocket_manager import ws_manager
-from ..services import validate_experiment
+from ..services.services import validate_experiment
 from ..redis_client import redis_client
 from ..tasks import device_worker
 

@@ -1,6 +1,6 @@
 from sqlmodel import Field, SQLModel, Relationship
 from pydantic import BaseModel, field_validator
-from typing import Optional
+from typing import Optional, Literal
 
 # Database models
 
@@ -13,6 +13,7 @@ class Device(SQLModel, table=True):
     __tablename__ = "devices"
     id: int | None = Field(default=None, primary_key=True)
     name: str
+    device_type: str | None = None
     
     # Relationships - 1:1 (jeden config na zariadenie)
     config: Optional["Config"] = Relationship(back_populates="device")
@@ -24,6 +25,7 @@ class Config(SQLModel, table=True):
     software_id: int | None = Field(default=None, foreign_key="software.id")
     time_limit_id: int | None = Field(default=None, foreign_key="time_limits.id")
     output_path: str | None = None
+    port: str
     
     # Relationships
     device: "Device" = Relationship(back_populates="config")
@@ -104,6 +106,7 @@ class ConfigPublic(BaseModel):
 class DeviceDetailPublic(BaseModel):
     id: int
     name: str
+    device_type: str | None = None
     config: ConfigPublic | None = None  # ← Zmenené z list na Optional
     
     class Config:
@@ -112,6 +115,50 @@ class DeviceDetailPublic(BaseModel):
 class DevicePublic(BaseModel):
     id: int
     name: str
+    device_type: str | None = None
+
+    class Config:
+        from_attributes = True
+
+#Response pre server
+
+class ServerStatusPublic(BaseModel):
+    status: str
+
+class ServerDeviceSoftwarePublic(BaseModel):
+    name: str
+
+
+class ServerDevicePublic(BaseModel):
+    name: str
+    maintenance_start: str
+    maintenance_end: str
+    device_type: str | None = None
+    software: list[ServerDeviceSoftwarePublic]
+
+
+class ServerDevicesPublic(BaseModel):
+    devices: list[ServerDevicePublic]
+
+
+class ServerSyncDeviceTypePublic(BaseModel):
+    name: str
+
+
+class ServerSyncDevicePublic(BaseModel):
+    name: str
+    maintenance_start: str
+    maintenance_end: str
+    device_type: ServerSyncDeviceTypePublic
+    software: list[ServerDeviceSoftwarePublic]
+
+
+class ServerSyncPublic(BaseModel):
+    status: Literal["ok", "unavailable"]
+    devices: list[ServerSyncDevicePublic]
+
+class ServerExperimentPublic(BaseModel):
+    job_id: str
 
 # Create modely
 
@@ -128,6 +175,7 @@ class InputLimitCreate(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
+    device_type: str | None = None
 
 class ConfigCreate(BaseModel):
     device_id: int
@@ -153,3 +201,31 @@ class ExperimentRun(BaseModel):
     input_values: dict[str, int | float | bool]
     period: int
     frequency: int
+
+class ExperimentSetpointStep(BaseModel):
+    duration: float
+    value: float
+
+
+class ExperimentSetpointChanges(BaseModel):
+    start_value: float
+    steps: list[ExperimentSetpointStep]
+
+
+class ExperimentInputArgument(BaseModel):
+    value: int | float | bool | str
+    type: str
+    unit: str | None = None
+    order: int
+
+
+class ExperimentReq(BaseModel):
+    command: str    # Must be start, otherwise rise 400
+    setpoint_changes: ExperimentSetpointChanges
+    input_arguments: dict[str, ExperimentInputArgument]
+    output_arguments: list[str]
+    simulation_time: int | float
+    sample_rate: int | float
+    software_name: str
+    device_name: str
+

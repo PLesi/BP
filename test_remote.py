@@ -4,7 +4,7 @@ import websockets
 import json
 import sys
 
-SERVER_IP = "localhost"  # IP servera
+SERVER_IP = "147.175.105.181"  # IP servera
 
 print("=" * 60)
 print("REMOTE TEST")
@@ -12,7 +12,7 @@ print("=" * 60)
 
 # Test 1: Skontroluj či server responds
 print("\n[1/3] Server connection")
-print(f"     URL: http://{SERVER_IP}:8000/docs")
+print(f"     URL: http://{SERVER_IP}:8000")
 sys.stdout.flush()
 
 try:

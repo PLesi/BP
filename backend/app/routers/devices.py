@@ -5,21 +5,14 @@ from sqlmodel import select
 
 from ..models import Device, DeviceCreate, DevicePublic, DeviceDetailPublic, Config, Input
 from ..db import get_session
+from ..services.device_services import get_devices_with_details
 
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 @router.get("", response_model=list[DeviceDetailPublic])  
 async def get_devices(session: AsyncSession = Depends(get_session)):
-    # load everything NOW ( eager load )
-    stmt = select(Device).options(
-        selectinload(Device.config).selectinload(Config.software), 
-        selectinload(Device.config).selectinload(Config.inputs).selectinload(Input.input_limit),
-        selectinload(Device.config).selectinload(Config.outputs),
-        selectinload(Device.config).selectinload(Config.time_limit)
-    )
-    results = await session.execute(stmt)
-    return results.scalars().all() 
+    return await get_devices_with_details(session)
 
 @router.get("/{id}", response_model=DeviceDetailPublic)
 async def get_device(id: int, session: AsyncSession = Depends(get_session)):
@@ -45,7 +38,11 @@ async def create_device(
     device: DeviceCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    db_device = Device(name=device.name)
+    clean_device_type = None
+    if device.device_type:
+        clean_device_type = device.device_type.strip() or None
+
+    db_device = Device(name=device.name, device_type=clean_device_type)
     session.add(db_device)
     await session.commit()
     await session.refresh(db_device)
@@ -68,6 +65,12 @@ async def update_device(
         )
     
     db_device.name = device.name
+    if "device_type" in device.model_fields_set:
+        if device.device_type is None:
+            db_device.device_type = None
+        else:
+            db_device.device_type = device.device_type.strip() or None
+
     session.add(db_device)
     await session.commit()
     await session.refresh(db_device)

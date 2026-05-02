@@ -4,7 +4,7 @@ import asyncio
 
 from .redis_client import redis_client
 from .websocket_manager import ws_manager
-from .services import calculate_estimated_wait_time
+from .services.services import calculate_estimated_wait_time
 
 def acquire_lock(device_id: int) -> bool:
     lock_key = f"device_lock:{device_id}"
