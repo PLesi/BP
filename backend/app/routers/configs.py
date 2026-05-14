@@ -9,6 +9,17 @@ from ..db import get_session
 
 router = APIRouter(prefix="/configs", tags=["configs"])
 
+@router.get("", response_model=list[ConfigPublic])
+async def get_configs(session: AsyncSession = Depends(get_session)):
+    stmt = select(Config).options(
+        selectinload(Config.software),
+        selectinload(Config.inputs).selectinload(Input.input_limit),
+        selectinload(Config.outputs),
+        selectinload(Config.time_limit)
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
 @router.get("/{id}", response_model=ConfigPublic)
 async def get_config(
     id: int,
@@ -78,6 +89,7 @@ async def create_config(
     # Create config
     db_config = Config(
         device_id=config.device_id,
+        port=config.port,
         software_id=config.software_id,  
         time_limit_id=time_limit_id,
         output_path=config.output_path
@@ -156,14 +168,24 @@ async def update_config(
     else:
         db_config.time_limit_id = None
     
-    # Update output_path
+    # Update output_path and port
     db_config.output_path = config_update.output_path
+    db_config.port = config_update.port
     
     session.add(db_config)
     await session.commit()
-    await session.refresh(db_config)
-    
-    return db_config
+
+    # Reload with relationships required by ConfigPublic to avoid async lazy-load errors
+    stmt = select(Config).where(Config.id == id).options(
+        selectinload(Config.software),
+        selectinload(Config.time_limit),
+        selectinload(Config.inputs).selectinload(Input.input_limit),
+        selectinload(Config.outputs)
+    )
+    result = await session.execute(stmt)
+    updated_config = result.scalar_one()
+
+    return updated_config
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,6 +1,7 @@
 from sqlmodel import Field, SQLModel, Relationship
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Literal
+from datetime import time
 
 # Database models
 
@@ -14,7 +15,9 @@ class Device(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     device_type: str | None = None
-    
+    maintenance_start: time | None = None
+    maintenance_end: time | None = None
+
     # Relationships - 1:1 (jeden config na zariadenie)
     config: Optional["Config"] = Relationship(back_populates="device")
 
@@ -97,6 +100,8 @@ class TimeLimitPublic(BaseModel):
 
 class ConfigPublic(BaseModel):
     id: int
+    device_id: int
+    port: str
     software: SoftwarePublic | None = None
     inputs: list[InputPublic]
     outputs: list[OutputPublic]
@@ -107,6 +112,8 @@ class DeviceDetailPublic(BaseModel):
     id: int
     name: str
     device_type: str | None = None
+    maintenance_start: time | None = None
+    maintenance_end: time | None = None
     config: ConfigPublic | None = None  # ← Zmenené z list na Optional
     
     class Config:
@@ -116,6 +123,8 @@ class DevicePublic(BaseModel):
     id: int
     name: str
     device_type: str | None = None
+    maintenance_start: time | None = None
+    maintenance_end: time | None = None
 
     class Config:
         from_attributes = True
@@ -160,6 +169,50 @@ class ServerSyncPublic(BaseModel):
 class ServerExperimentPublic(BaseModel):
     job_id: str
 
+
+class WebRTCGrantRefreshReq(BaseModel):
+    grant_token: str
+
+    @field_validator("grant_token")
+    @classmethod
+    def validate_grant_token(cls, value: str) -> str:
+        token = value.strip()
+        if not token:
+            raise ValueError("grant_token must not be empty")
+        return token
+
+
+class WebRTCGrantRevokeReq(BaseModel):
+    grant_token: str
+
+    @field_validator("grant_token")
+    @classmethod
+    def validate_grant_token(cls, value: str) -> str:
+        token = value.strip()
+        if not token:
+            raise ValueError("grant_token must not be empty")
+        return token
+
+
+class WebRTCGrantPublic(BaseModel):
+    device_name: str
+    grant_token: str
+    expires_at: str
+
+
+class WebRTCOfferReq(BaseModel):
+    sdp: str
+    type: str
+
+
+class WebRTCOfferPublic(BaseModel):
+    sdp: str
+    type: str
+
+
+class WebRTCRevokePublic(BaseModel):
+    status: Literal["revoked"]
+
 # Create modely
 
 class SoftwareCreate(BaseModel):
@@ -176,9 +229,12 @@ class InputLimitCreate(BaseModel):
 class DeviceCreate(BaseModel):
     name: str
     device_type: str | None = None
+    maintenance_start: time | None = None
+    maintenance_end: time | None = None
 
 class ConfigCreate(BaseModel):
     device_id: int
+    port: str
     software_id: int | None = None
     time_limit: TimeLimitCreate | None = None
     output_path: str | None = None
@@ -195,12 +251,7 @@ class OutputCreate(BaseModel):
     name: str
 
 
-# Request model for experiments
-class ExperimentRun(BaseModel):
-    device_id: int
-    input_values: dict[str, int | float | bool]
-    period: int
-    frequency: int
+# ── Experiment request / response models ────────────────────────────────────
 
 class ExperimentSetpointStep(BaseModel):
     duration: float
@@ -214,18 +265,81 @@ class ExperimentSetpointChanges(BaseModel):
 
 class ExperimentInputArgument(BaseModel):
     value: int | float | bool | str
-    type: str
-    unit: str | None = None
+    type: Literal["number", "string", "boolean"]
+    unit: str                       # required per spec
     order: int
 
 
 class ExperimentReq(BaseModel):
-    command: str    # Must be start, otherwise rise 400
-    setpoint_changes: ExperimentSetpointChanges
+    command: Literal["start"]       # any other value → 400
+    setpoint_changes: ExperimentSetpointChanges | None = None   # optional per spec
     input_arguments: dict[str, ExperimentInputArgument]
     output_arguments: list[str]
-    simulation_time: int | float
-    sample_rate: int | float
+    simulation_time: float
+    sample_rate: float
     software_name: str
     device_name: str
+
+
+# WebSocket-only commands (change / stop)
+
+class ExperimentChangeReq(BaseModel):
+    command: Literal["change"]
+    input_arguments: dict[str, ExperimentInputArgument]
+
+class ExperimentStopReq(BaseModel):
+    command: Literal["stop"]
+
+
+# ── Experiment response / log models ────────────────────────────────────────
+
+class ExperimentInputHistoryEntry(BaseModel):
+    command: str
+    input_args: dict[str, ExperimentInputArgument]
+    applied_at: float
+
+
+class ExperimentOutputHistoryEntry(BaseModel):
+    time: float
+    model_config = ConfigDict(extra="allow")
+
+
+class ExperimentRunLog(BaseModel):
+    input_history: list[ExperimentInputHistoryEntry]
+    output_history: list[ExperimentOutputHistoryEntry]
+    setpoint_changes: ExperimentSetpointChanges | None = None
+
+
+class FinishedExperiment(BaseModel):
+    device_name: str
+    software_name: str
+    run: ExperimentRunLog | None
+    started_at: str
+    finished_at: str | None
+    finish_reason: str
+
+
+class UnfinishedExperiment(BaseModel):
+    device_name: str
+    software_name: str
+    run: None = None
+    started_at: str
+    finished_at: None = None
+    finish_reason: Literal["n/a"] = "n/a"
+
+
+class ExperimentLog(FinishedExperiment):
+    pass
+
+
+class ExperimentNotFoundResponse(BaseModel):
+    detail: str
+
+
+
+
+
+
+
+
 

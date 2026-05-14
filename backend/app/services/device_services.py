@@ -21,7 +21,6 @@ async def get_devices_with_details(session: AsyncSession) -> list[Device]:
 
 
 import os
-import matlab.engine
 
 def check_device_online(port: str, slx_model: str) -> dict:
     """
@@ -30,6 +29,11 @@ def check_device_online(port: str, slx_model: str) -> dict:
     Returns:
         {"online": bool, "usable": bool, "reason": str}
     """
+    try:
+        import matlab.engine
+    except ImportError:
+        return {"online": False, "usable": False, "reason": "MATLAB engine not installed"}
+
     # 1. Serial port (fyzický HW)
     if not os.path.exists(port):
         return {"online": False, "usable": False, "reason": f"Port {port} not found"}

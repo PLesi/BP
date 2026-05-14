@@ -4,7 +4,7 @@ import uuid
 import json
 import asyncio
 
-from ..models import ExperimentRun
+from ..models import ExperimentReq
 from ..db import get_session
 from ..websocket_manager import ws_manager
 from ..services.services import validate_experiment
@@ -16,32 +16,34 @@ router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 @router.post("/run")
 async def run_experiment(
-    experiment: ExperimentRun,
+    experiment: ExperimentReq,
     session: AsyncSession = Depends(get_session)
-):    
-
+):
     device = await validate_experiment(
         session,
-        experiment.device_id,
-        experiment.input_values,
-        experiment.period,
-        experiment.frequency
+        device_name=experiment.device_name,
+        input_arguments=experiment.input_arguments,
+        simulation_time=experiment.simulation_time,
+        sample_rate=experiment.sample_rate,
     )
-    
-    # Generate unique task_id
+
     task_id = str(uuid.uuid4())
-    
+
     queue_item = {
         "task_id": task_id,
-        "device_id": experiment.device_id,
-        "input_values": experiment.input_values,
-        "period": experiment.period,
-        "frequency": experiment.frequency
+        "device_id": device.id,
+        "device_name": experiment.device_name,
+        "software_name": experiment.software_name,
+        "input_arguments": {k: v.model_dump() for k, v in experiment.input_arguments.items()},
+        "output_arguments": experiment.output_arguments,
+        "simulation_time": experiment.simulation_time,
+        "sample_rate": experiment.sample_rate,
+        "setpoint_changes": experiment.setpoint_changes.model_dump() if experiment.setpoint_changes else None,
     }
-    redis_client.lpush(f"device_queue:{experiment.device_id}", json.dumps(queue_item))
-    device_worker.send(experiment.device_id)
-    
-    return queue_item
+    redis_client.lpush(f"device_queue:{device.id}", json.dumps(queue_item))
+    device_worker.send(device.id)
+
+    return {"task_id": task_id}
 
 
 @router.websocket("/ws/{task_id}")

@@ -1,6 +1,7 @@
 import dramatiq
 import json
 import asyncio
+from datetime import datetime, UTC
 
 from .redis_client import redis_client
 from .websocket_manager import ws_manager
@@ -52,7 +53,24 @@ def device_worker(device_id: int):
 async def run_experiment(experiment: dict):
     task_id = experiment["task_id"]
     device_id = experiment["device_id"]
-    
+    experiment_key = f"experiment:{task_id}"
+    output_history: list[dict] = []
+    started_at = datetime.now(UTC).isoformat()
+
+    redis_client.set(
+        experiment_key,
+        json.dumps(
+            {
+                "device_name": experiment.get("device_name", ""),
+                "software_name": experiment.get("software_name", ""),
+                "run": None,
+                "started_at": started_at,
+                "finished_at": None,
+                "finish_reason": "n/a",
+            }
+        ),
+    )
+
     print(f"Sending 'starting' message for task {task_id}")
     await ws_manager.send_message(task_id, {"status": "starting", "device_id": device_id})
 
@@ -61,7 +79,13 @@ async def run_experiment(experiment: dict):
         'python', 'test_device_script.py',
         '--task-id', task_id,
         '--device-id', str(device_id),
-        '--inputs', json.dumps(experiment["input_values"]),
+        '--device-name', experiment.get("device_name", ""),
+        '--software-name', experiment.get("software_name", ""),
+        '--input-arguments', json.dumps(experiment.get("input_arguments", {})),
+        '--output-arguments', json.dumps(experiment.get("output_arguments", [])),
+        '--simulation-time', str(experiment.get("simulation_time", 0)),
+        '--sample-rate', str(experiment.get("sample_rate", 1)),
+        '--setpoint-changes', json.dumps(experiment.get("setpoint_changes")),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
@@ -71,6 +95,8 @@ async def run_experiment(experiment: dict):
         print(f"Output: {output}")
         try:
             data = json.loads(output)
+            if isinstance(data, dict) and "time" in data:
+                output_history.append(data)
             await ws_manager.send_message(task_id, {
                 "status": "running",
                 "device_id": device_id,
@@ -84,6 +110,29 @@ async def run_experiment(experiment: dict):
             })
     
     await process.wait()
+    redis_client.set(
+        experiment_key,
+        json.dumps(
+            {
+                "device_name": experiment.get("device_name", ""),
+                "software_name": experiment.get("software_name", ""),
+                "run": {
+                    "input_history": [
+                        {
+                            "command": "start",
+                            "input_args": experiment.get("input_arguments", {}),
+                            "applied_at": 0.0,
+                        }
+                    ],
+                    "output_history": output_history,
+                    "setpoint_changes": experiment.get("setpoint_changes"),
+                },
+                "started_at": started_at,
+                "finished_at": datetime.now(UTC).isoformat(),
+                "finish_reason": "simulation_time_reached",
+            }
+        ),
+    )
     print(f"Experiment completed for task {task_id}")
     await ws_manager.send_message(task_id, {"status": "completed", "device_id": device_id})
 

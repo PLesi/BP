@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from ..models import Device, DeviceCreate, DevicePublic, DeviceDetailPublic, Config, Input
+from ..models import Device, DeviceCreate, DevicePublic, DeviceDetailPublic, Config, Input, Output, TimeLimit, InputLimit
 from ..db import get_session
 from ..services.device_services import get_devices_with_details
 
@@ -42,7 +42,12 @@ async def create_device(
     if device.device_type:
         clean_device_type = device.device_type.strip() or None
 
-    db_device = Device(name=device.name, device_type=clean_device_type)
+    db_device = Device(
+        name=device.name,
+        device_type=clean_device_type,
+        maintenance_start=device.maintenance_start,
+        maintenance_end=device.maintenance_end,
+    )
     session.add(db_device)
     await session.commit()
     await session.refresh(db_device)
@@ -70,6 +75,8 @@ async def update_device(
             db_device.device_type = None
         else:
             db_device.device_type = device.device_type.strip() or None
+    db_device.maintenance_start = device.maintenance_start
+    db_device.maintenance_end = device.maintenance_end
 
     session.add(db_device)
     await session.commit()
@@ -81,7 +88,15 @@ async def delete_device(
     id: int,
     session: AsyncSession = Depends(get_session)
 ):
-    stmt = select(Device).where(Device.id == id)
+    stmt = (
+        select(Device)
+        .where(Device.id == id)
+        .options(
+            selectinload(Device.config).selectinload(Config.inputs).selectinload(Input.input_limit),
+            selectinload(Device.config).selectinload(Config.outputs),
+            selectinload(Device.config).selectinload(Config.time_limit),
+        )
+    )
     result = await session.execute(stmt)
     db_device = result.scalar_one_or_none()
 
@@ -90,7 +105,26 @@ async def delete_device(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found"
         )
-    
-    await session.delete(db_device)    
+
+    if db_device.config:
+        config = db_device.config
+
+        # Delete inputs and their limits
+        for inp in config.inputs:
+            if inp.input_limit:
+                await session.delete(inp.input_limit)
+            await session.delete(inp)
+
+        # Delete outputs
+        for out in config.outputs:
+            await session.delete(out)
+
+        # Delete time limit
+        if config.time_limit:
+            await session.delete(config.time_limit)
+
+        await session.delete(config)
+
+    await session.delete(db_device)
     await session.commit()
     return None

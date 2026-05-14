@@ -2,39 +2,55 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from fastapi import HTTPException, status
+from fastapi import Header, HTTPException, status
 import json
+import os
 import time
 
 
-from ..models import Device, Config, Input
+from ..models import Device, Config, Input, ExperimentInputArgument
 from ..redis_client import redis_client
 
 
+def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    expected_key = os.getenv("API_KEY")
+    if not expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Server API key is not found",
+        )
+    if x_api_key != expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Unauthorized",
+        )
+
+
 async def validate_experiment(
-    session: AsyncSession, 
-    device_id: int, 
-    input_values: dict[str, int | float | bool],
-    period: int,
-    frequency: int
+    session: AsyncSession,
+    device_name: str,
+    input_arguments: dict[str, ExperimentInputArgument],
+    simulation_time: float,
+    sample_rate: float,
 ) -> Device:
     """
-    Validuje kompletný experiment:
-    - Device existuje
+    Validuje experiment podľa novej spec:
+    - Device existuje (lookup by name)
     - Config existuje
     - Všetky required inputy sú prítomné
-    - Typy inputov sa zhodujú
+    - Typy inputov sa zhodujú s DB definíciou
     - Input hodnoty sú v limitoch
-    - Period a frequency sú v time_limit
+    - simulation_time / sample_rate sú v rámci time_limit
     """
-    
-    # 1. Načítaj device s config a všetkými vzťahmi
+
+    # 1. Načítaj device by name s config a všetkými vzťahmi
     stmt = (
         select(Device)
-        .where(Device.id == device_id)
+        .where(Device.name == device_name)
         .options(
             selectinload(Device.config).selectinload(Config.inputs).selectinload(Input.input_limit),
-            selectinload(Device.config).selectinload(Config.time_limit)
+            selectinload(Device.config).selectinload(Config.time_limit),
+            selectinload(Device.config).selectinload(Config.software),
         )
     )
     result = await session.execute(stmt)
@@ -43,88 +59,80 @@ async def validate_experiment(
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Device not found"
+            detail=f"Device '{device_name}' not found"
         )
-    
+
     if not device.config:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device has no configuration"
         )
-    
-    # 2. Validuj time_limit (period a frequency)
+
+    # 2. Validuj time_limit
     if device.config.time_limit:
-        if period > device.config.time_limit.period:
+        if simulation_time > device.config.time_limit.period:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Period {period}s exceeds maximum {device.config.time_limit.period}s"
+                detail=f"simulation_time {simulation_time}s exceeds maximum {device.config.time_limit.period}s"
             )
-        
-        if frequency > device.config.time_limit.frequency:
+        if sample_rate > device.config.time_limit.frequency:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Frequency {frequency}s exceeds maximum {device.config.time_limit.frequency}s"
+                detail=f"sample_rate {sample_rate} exceeds maximum {device.config.time_limit.frequency}"
             )
-    
+
     # 3. Vytvor dict inputov podľa názvu pre rýchle vyhľadávanie
     required_inputs = {inp.name: inp for inp in device.config.inputs}
-    
+
     # 4. Skontroluj, že všetky required inputy sú prítomné
-    for input_name in required_inputs.keys():
-        if input_name not in input_values:
+    for input_name in required_inputs:
+        if input_name not in input_arguments:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Missing required input: {input_name}"
             )
-    
+
     # 5. Skontroluj, že user neposlal neznáme inputy
-    for input_name in input_values.keys():
+    for input_name in input_arguments:
         if input_name not in required_inputs:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Unknown input: {input_name}"
             )
-    
+
     # 6. Validuj typy a limity pre každý input
-    for input_name, value in input_values.items():
+    for input_name, arg in input_arguments.items():
         input_def = required_inputs[input_name]
-        
-        # Validuj typ
-        if input_def.type == "int":
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Input '{input_name}' must be int, got {type(value).__name__}"
-                )
-        
-        elif input_def.type == "float":
+        value = arg.value
+
+        # Map spec type ("number") to DB type ("float"/"int") loosely
+        db_type = input_def.type
+        if db_type in ("float", "int", "number"):
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Input '{input_name}' must be float, got {type(value).__name__}"
+                    detail=f"Input '{input_name}' must be numeric, got {type(value).__name__}"
                 )
-        
-        elif input_def.type == "bool":
+        elif db_type in ("bool", "boolean"):
             if not isinstance(value, bool):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Input '{input_name}' must be bool, got {type(value).__name__}"
+                    detail=f"Input '{input_name}' must be boolean, got {type(value).__name__}"
                 )
-        
-        # Validuj limity (ak existujú a hodnota je číselná)
+
+        # Validuj limity
         if input_def.input_limit and isinstance(value, (int, float)):
             if value < input_def.input_limit.min:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Input '{input_name}' value {value} is below minimum {input_def.input_limit.min}"
                 )
-            
             if value > input_def.input_limit.max:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Input '{input_name}' value {value} exceeds maximum {input_def.input_limit.max}"
                 )
-    
+
     return device
 
 def get_task_device_id(task_id: str) -> int | None:

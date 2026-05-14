@@ -64,8 +64,13 @@ async def create_input(
     
     session.add(db_input)
     await session.commit()
-    await session.refresh(db_input)
-    return db_input
+
+    stmt = select(Input).where(Input.id == db_input.id).options(
+        selectinload(Input.input_limit)
+    )
+    result = await session.execute(stmt)
+    created_input = result.scalar_one()
+    return created_input
 
 @router.patch("/{id}", response_model=InputPublic)
 async def update_input(
@@ -108,8 +113,13 @@ async def update_input(
     
     session.add(db_input)
     await session.commit()
-    await session.refresh(db_input)
-    return db_input
+
+    stmt = select(Input).where(Input.id == db_input.id).options(
+        selectinload(Input.input_limit)
+    )
+    result = await session.execute(stmt)
+    updated_input = result.scalar_one()
+    return updated_input
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_input(

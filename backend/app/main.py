@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .db import init_db
-from .routers import devices, configs, software, inputs, outputs, experiments, server
+from .routers import devices, configs, software, inputs, outputs, experiments, server, webrtc
 
 async def lifespan(app: FastAPI):
     await init_db()
@@ -28,3 +28,5 @@ app.include_router(inputs.router)
 app.include_router(outputs.router)
 app.include_router(experiments.router)
 app.include_router(server.router)
+app.include_router(server.ws_router)
+app.include_router(webrtc.router)

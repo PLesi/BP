@@ -1,26 +1,113 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 import os
+import uuid
+import json
+import asyncio
+from datetime import datetime, UTC, timedelta
+from pydantic import ValidationError
 
 from ..db import get_session
-from ..models import ServerDevicesPublic, ServerStatusPublic, ServerSyncPublic, ServerExperimentPublic, ExperimentReq
+from ..models import (
+    ServerDevicesPublic,
+    ServerStatusPublic,
+    ServerSyncPublic,
+    ServerExperimentPublic,
+    ExperimentReq,
+    FinishedExperiment,
+    UnfinishedExperiment,
+    ExperimentNotFoundResponse,
+)
 from ..services.device_services import get_devices_with_details, check_device_online
-from ..services.services import validate_experiment
+from ..services.services import validate_experiment, verify_api_key
+from ..redis_client import redis_client
+from ..tasks import device_worker
 
 router = APIRouter(prefix="/api/server", tags=["server"])
+ws_router = APIRouter(tags=["server"])
 
-def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
-    expectedKey = os.getenv("API_KEY")
-    if not expectedKey:
+
+def verify_ws_api_key(websocket: WebSocket):
+    expected_key = os.getenv("API_KEY")
+    if not expected_key:
+        return False
+    provided = websocket.headers.get("x-api-key")
+    return provided == expected_key
+
+
+async def enqueue_server_experiment(
+    experiment: ExperimentReq,
+    session: AsyncSession,
+) -> str:
+    device = await validate_experiment(
+        session,
+        device_name=experiment.device_name,
+        input_arguments=experiment.input_arguments,
+        simulation_time=experiment.simulation_time,
+        sample_rate=experiment.sample_rate,
+    )
+
+    # Validate software exists on the device
+    if not device.config.software or device.config.software.name != experiment.software_name:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server API key is not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Software '{experiment.software_name}' not found on device '{experiment.device_name}'"
         )
-    if x_api_key != expectedKey:
+
+    # Check device is not already locked (busy)
+    if redis_client.exists(f"device_lock:{device.id}"):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized"
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Device is currently busy with another experiment"
         )
+
+    job_id = str(uuid.uuid4())
+    queue_item = {
+        "task_id": job_id,
+        "device_id": device.id,
+        "device_name": experiment.device_name,
+        "software_name": experiment.software_name,
+        "input_arguments": {k: v.model_dump() for k, v in experiment.input_arguments.items()},
+        "output_arguments": experiment.output_arguments,
+        "simulation_time": experiment.simulation_time,
+        "sample_rate": experiment.sample_rate,
+        "setpoint_changes": experiment.setpoint_changes.model_dump() if experiment.setpoint_changes else None,
+    }
+
+    redis_client.set(
+        f"experiment:{job_id}",
+        json.dumps(
+            {
+                "device_name": experiment.device_name,
+                "software_name": experiment.software_name,
+                "run": None,
+                "started_at": datetime.now(UTC).isoformat(),
+                "finished_at": None,
+                "finish_reason": "n/a",
+            }
+        ),
+    )
+
+    redis_client.lpush(f"device_queue:{device.id}", json.dumps(queue_item))
+    device_worker.send(device.id)
+    return job_id
+
+
+async def stream_job_updates(websocket: WebSocket, job_id: str):
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe(f"ws:{job_id}")
+    try:
+        while True:
+            message = pubsub.get_message(ignore_subscribe_messages=True)
+            if message and message.get("type") == "message":
+                payload = json.loads(message["data"])
+                await websocket.send_json({"job_id": job_id, **payload})
+                if payload.get("status") == "completed":
+                    break
+            await asyncio.sleep(0.05)
+    finally:
+        pubsub.unsubscribe(f"ws:{job_id}")
+        pubsub.close()
 
 @router.get("/status",response_model=ServerStatusPublic)
 async def get_server_status( _ : None = Depends(verify_api_key)):
@@ -91,18 +178,74 @@ async def get_server_sync(
     return {
         "status": "ok",
         "devices": devices_payload,
-    }
+    } 
 
-@router.post("/experiments/queue",response_model=ServerExperimentPublic)
-async def queue_experiment(experiment: ExperimentReq, _: None = Depends(verify_api_key)
-                           ):
-    if experiment.command != "start":
+@router.post("/experiments/queue", response_model=ServerExperimentPublic)
+async def queue_experiment(
+    experiment: ExperimentReq,
+    _: None = Depends(verify_api_key),
+    session: AsyncSession = Depends(get_session),
+):
+    job_id = await enqueue_server_experiment(experiment, session)
+    return {"job_id": job_id}
+
+
+@router.get(
+    "/experiments/{job_id}",
+    response_model=FinishedExperiment | UnfinishedExperiment,
+    responses={404: {"model": ExperimentNotFoundResponse}},
+)
+async def get_experiment(
+    job_id: str,
+    _: None = Depends(verify_api_key),
+):
+    raw = redis_client.get(f"experiment:{job_id}")
+    if not raw:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid command"
-        )    
-    # TODO: ADD parameter validations in device_services, queue.
-    validate_experiment(se)
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Experiment with job_id not found",
+        )
+
+    return json.loads(raw)
 
 
- 
+@ws_router.websocket("/ws/server/experiments")
+async def ws_server_experiments(
+    websocket: WebSocket,
+    session: AsyncSession = Depends(get_session),
+):
+    if not verify_ws_api_key(websocket):
+        await websocket.close(code=1008, reason="Unauthorized")
+        return
+
+    await websocket.accept()
+    await websocket.send_json({"status": "ready", "message": "WebSocket connected"})
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+            command = message.get("command")
+
+            if command != "start":
+                await websocket.send_json({"error": "Unsupported command. Use command='start'."})
+                continue
+
+            try:
+                req = ExperimentReq.model_validate(message)
+            except ValidationError as exc:
+                await websocket.send_json({"error": "Invalid request", "detail": exc.errors()})
+                continue
+
+            try:
+                job_id = await enqueue_server_experiment(req, session)
+            except HTTPException as exc:
+                await websocket.send_json({"error": exc.detail, "status_code": exc.status_code})
+                continue
+
+            await websocket.send_json({"job_id": job_id, "status": "queued"})
+            await stream_job_updates(websocket, job_id)
+            final_raw = redis_client.get(f"experiment:{job_id}")
+            if final_raw:
+                await websocket.send_json({"job_id": job_id, "status": "final", "result": json.loads(final_raw)})
+    except WebSocketDisconnect:
+        return
