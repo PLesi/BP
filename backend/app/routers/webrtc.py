@@ -5,7 +5,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
@@ -162,7 +162,8 @@ async def revoke_webrtc_grant(body: WebRTCGrantRevokeReq, _: None = Depends(veri
 async def create_webrtc_offer(
     device_name: str,
     body: WebRTCOfferReq,
-    grant_token: str | None = Header(default=None, alias="grant_token"),
+    request: Request,
+    grant_token: str | None = Header(default=None, alias="grant-token"),
     session: AsyncSession = Depends(get_session),
 ):
     if not RTCPeerConnection or not RTCSessionDescription or not MediaPlayer:
@@ -171,7 +172,9 @@ async def create_webrtc_offer(
             detail="aiortc is not installed on the server",
         )
 
-    _, _ = _validate_grant_for_device(device_name, grant_token)
+    # Backward compatibility for older clients still sending grant_token.
+    effective_token = grant_token or request.headers.get("grant_token")
+    _, _ = _validate_grant_for_device(device_name, effective_token)
 
     await _check_device_exists(session, device_name)
 
@@ -226,9 +229,12 @@ async def create_webrtc_offer(
 @router.post("/devices/{device_name}/webrtc/stop", response_model=WebRTCRevokePublic)
 async def stop_webrtc_offer(
     device_name: str,
-    grant_token: str | None = Header(default=None, alias="grant_token"),
+    request: Request,
+    grant_token: str | None = Header(default=None, alias="grant-token"),
 ):
-    token, _ = _validate_grant_for_device(device_name, grant_token)
+    # Backward compatibility for older clients still sending grant_token.
+    effective_token = grant_token or request.headers.get("grant_token")
+    token, _ = _validate_grant_for_device(device_name, effective_token)
 
     await _close_peer(device_name)
     redis_client.delete(_grant_key(token))
