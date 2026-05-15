@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebRTC Test Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 24px auto;
+      padding: 0 16px;
+      line-height: 1.4;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    input {
+      padding: 8px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      margin-right: 8px;
+      margin-top: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    video {
+      width: 100%;
+      max-width: 860px;
+      background: #111;
+      margin-top: 12px;
+    }
+    pre {
+      background: #f5f5f5;
+      padding: 10px;
+      overflow: auto;
+      max-height: 220px;
+      border: 1px solid #ddd;
+    }
+  </style>
+</head>
+<body>
+  <h2>WebRTC Test Client</h2>
+
+  <div class="row">
+    <label for="baseUrl">Base URL</label>
+    <input id="baseUrl" value="http://localhost:8000" />
+  </div>
+  <div class="row">
+    <label for="deviceName">Device Name</label>
+    <input id="deviceName" value="uDAQ28LT" />
+  </div>
+  <div class="row">
+    <label for="apiKey">X-API-Key</label>
+    <input id="apiKey" placeholder="Required for Generate Grant" />
+  </div>
+  <div class="row">
+    <label for="grantToken">Grant Token</label>
+    <input id="grantToken" placeholder="Will be filled automatically" />
+  </div>
+  <div class="row">
+    <label for="iceUrl">ICE (STUN) URL</label>
+    <input id="iceUrl" value="stun:stun.l.google.com:19302" />
+  </div>
+
+  <button id="btnGrant">1) Generate Grant</button>
+  <button id="btnStart">2) Start Stream</button>
+  <button id="btnStop">3) Stop Stream</button>
+
+  <video id="video" autoplay playsinline controls></video>
+
+  <h3>Log</h3>
+  <pre id="log"></pre>
+
+  <script>
+    let pc = null;
+
+    const el = {
+      baseUrl: document.getElementById('baseUrl'),
+      deviceName: document.getElementById('deviceName'),
+      apiKey: document.getElementById('apiKey'),
+      grantToken: document.getElementById('grantToken'),
+      iceUrl: document.getElementById('iceUrl'),
+      video: document.getElementById('video'),
+      log: document.getElementById('log'),
+      btnGrant: document.getElementById('btnGrant'),
+      btnStart: document.getElementById('btnStart'),
+      btnStop: document.getElementById('btnStop')
+    };
+
+    function log(msg) {
+      const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.log.textContent += line + '\n';
+      el.log.scrollTop = el.log.scrollHeight;
+      console.log(line);
+    }
+
+    function endpoints() {
+      const base = el.baseUrl.value.replace(/\/$/, '');
+      const device = encodeURIComponent(el.deviceName.value.trim());
+      return {
+        grants: `${base}/api/server/devices/${device}/webrtc/grants`,
+        offer: `${base}/api/server/devices/${device}/webrtc/offer`,
+        stop: `${base}/api/server/devices/${device}/webrtc/stop`
+      };
+    }
+
+    async function generateGrant() {
+      const { grants } = endpoints();
+      const apiKey = el.apiKey.value.trim();
+      if (!apiKey) {
+        alert('Please fill X-API-Key first.');
+        return;
+      }
+
+      log('Requesting grant token...');
+      const res = await fetch(grants, {
+        method: 'POST',
+        headers: {
+          'X-API-Key': apiKey,
+          'accept': 'application/json'
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(`Grant failed: ${res.status} ${JSON.stringify(data)}`);
+      }
+
+      el.grantToken.value = data.grant_token || '';
+      log(`Grant OK, expires_at=${data.expires_at}`);
+    }
+
+    async function startStream() {
+      const { offer } = endpoints();
+      const token = el.grantToken.value.trim();
+      const iceUrl = el.iceUrl.value.trim();
+      if (!token) {
+        alert('Missing grant token. Generate it first.');
+        return;
+      }
+
+      if (pc) {
+        pc.close();
+      }
+
+      const iceServers = [];
+      if (iceUrl) {
+        iceServers.push({ urls: iceUrl });
+      }
+
+      pc = new RTCPeerConnection({ iceServers });
+
+      pc.ontrack = (ev) => {
+        el.video.srcObject = ev.streams[0];
+        log('Video track received.');
+      };
+
+      pc.onconnectionstatechange = () => {
+        log(`Connection state: ${pc.connectionState}`);
+      };
+
+      // We want to receive video from server.
+      pc.addTransceiver('video', { direction: 'recvonly' });
+
+      const localOffer = await pc.createOffer();
+      await pc.setLocalDescription(localOffer);
+
+      log('Sending SDP offer to backend...');
+      const res = await fetch(offer, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json',
+          'grant-token': token
+        },
+        body: JSON.stringify({
+          type: pc.localDescription.type,
+          sdp: pc.localDescription.sdp
+        })
+      });
+
+      const answer = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(`Offer failed: ${res.status} ${JSON.stringify(answer)}`);
+      }
+
+      await pc.setRemoteDescription(answer);
+      log('Remote SDP answer applied. Stream should start soon.');
+    }
+
+    async function stopStream() {
+      const { stop } = endpoints();
+      const token = el.grantToken.value.trim();
+
+      if (token) {
+        const res = await fetch(stop, {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'grant-token': token
+          }
+        });
+        const body = await res.json().catch(() => ({}));
+        log(`Stop response: ${res.status} ${JSON.stringify(body)}`);
+      }
+
+      if (pc) {
+        pc.close();
+        pc = null;
+      }
+      el.video.srcObject = null;
+      log('Local connection closed.');
+    }
+
+    el.btnGrant.addEventListener('click', () => {
+      generateGrant().catch((e) => {
+        log(e.message);
+        alert(e.message);
+      });
+    });
+
+    el.btnStart.addEventListener('click', () => {
+      startStream().catch((e) => {
+        log(e.message);
+        alert(e.message);
+      });
+    });
+
+    el.btnStop.addEventListener('click', () => {
+      stopStream().catch((e) => {
+        log(e.message);
+        alert(e.message);
+      });
+    });
+  </script>
+</body>
+</html>
