@@ -1,29 +1,102 @@
 import sys
-import time
+import os
 import json
 import argparse
+import subprocess
+import time
+import shutil
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--task-id', required=True)
 parser.add_argument('--device-id', required=True)
-parser.add_argument('--inputs', required=True)
+parser.add_argument('--device-name', required=True)
+parser.add_argument('--software-name', required=True)
+parser.add_argument('--input-arguments', required=True)
+parser.add_argument('--output-arguments', required=True)
+parser.add_argument('--simulation-time', required=True)
+parser.add_argument('--sample-rate', required=True)
+parser.add_argument('--setpoint-changes', required=False, default='null')
 args = parser.parse_args()
 
-inputs = json.loads(args.inputs)
+input_arguments = json.loads(args.input_arguments)
+simulation_time = int(float(args.simulation_time))
+sample_rate = float(args.sample_rate)
 
-print(f"Starting experiment on device {args.device_id}")
-print(f"Task ID: {args.task_id}")
-print(f"Inputs: {inputs}")
 
-# Simulácia počítania do 10
-for i in range(1, 11):
-    result = {
-        "iteration": i,
-        "value": i * inputs.get("multiplier", 1),
-        "timestamp": time.time()
-    }
-    print(json.dumps(result))  # Toto pôjde do WebSocketu
-    sys.stdout.flush()  # Dôležité pre real-time streaming
-    time.sleep(1)
+def pick_python_with_matlab() -> str:
+    # Prefer explicit override if set.
+    env_python = os.getenv("MATLAB_PYTHON_EXECUTABLE")
+    candidates = [
+        env_python,
+        sys.executable,
+        shutil.which("python3"),
+        "/usr/bin/python3",
+    ]
 
-print(json.dumps({"status": "finished"}))
+    tested: set[str] = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        candidate = os.path.abspath(candidate)
+        if candidate in tested:
+            continue
+        tested.add(candidate)
+
+        probe = subprocess.run(
+            [candidate, "-c", "import matlab.engine"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if probe.returncode == 0:
+            return candidate
+
+    raise RuntimeError(
+        "No Python interpreter with matlab.engine found. "
+        "Set MATLAB_PYTHON_EXECUTABLE to your system Python."
+    )
+
+# Prekonvertuj JSON input_arguments na key:value,key:value format pre start.py
+input_str = ','.join(
+    f"{k}:{v['value']}" for k, v in input_arguments.items()
+)
+
+start_script = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'backend', 'app', 'routers', 'start.py'
+)
+
+cmd = [
+    pick_python_with_matlab(), start_script,
+    '--port=/dev/ttyUSB0',
+    '--output=out.txt',
+    f'--input={input_str}',
+    f'--duration={simulation_time}',
+    f'--sampletime={sample_rate}',
+]
+
+process = subprocess.Popen(
+    cmd,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+)
+
+start_time = time.time()
+
+for line in process.stdout:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        data = json.loads(line)
+        print(json.dumps(data), flush=True)
+    except json.JSONDecodeError:
+        elapsed = round(time.time() - start_time, 2)
+        print(json.dumps({"time": elapsed, "log": line}), flush=True)
+
+process.wait()
+
+if process.returncode != 0:
+    err = process.stderr.read()
+    print(json.dumps({"time": -1, "error": err}), flush=True)
+    sys.exit(process.returncode)

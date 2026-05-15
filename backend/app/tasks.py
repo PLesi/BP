@@ -2,6 +2,8 @@ import dramatiq
 import json
 import asyncio
 from datetime import datetime, UTC
+import sys
+import os
 
 from .redis_client import redis_client
 from .websocket_manager import ws_manager
@@ -76,7 +78,7 @@ async def run_experiment(experiment: dict):
 
     print(f"Starting subprocess for task {task_id}")
     process = await asyncio.create_subprocess_exec(
-        'python', 'test_device_script.py',
+        sys.executable, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'test_device_script.py'),
         '--task-id', task_id,
         '--device-id', str(device_id),
         '--device-name', experiment.get("device_name", ""),

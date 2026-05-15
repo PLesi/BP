@@ -48,15 +48,13 @@ def _grant_key(token: str) -> str:
     return f"webrtc:grant:{token}"
 
 
-def _parse_bearer(authorization: str | None) -> str:
-    if not authorization:
+def _parse_grant_token(grant_token: str | None) -> str:
+    if not grant_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header is required",
+            detail="grant_token header is required",
         )
-    token = authorization.strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
+    token = grant_token.strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -79,6 +77,20 @@ def _load_grant(token: str) -> dict:
             detail="Grant token has been revoked",
         )
     return grant
+
+
+def _validate_grant_for_device(
+    device_name: str,
+    grant_token: str | None = None,
+) -> tuple[str, dict]:
+    token = _parse_grant_token(grant_token)
+    grant = _load_grant(token)
+    if grant.get("device_name") != device_name:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Grant token does not belong to this device",
+        )
+    return token, grant
 
 
 def _issue_grant(device_name: str, ttl: int = GRANT_TTL) -> tuple[str, str]:
@@ -150,7 +162,7 @@ async def revoke_webrtc_grant(body: WebRTCGrantRevokeReq, _: None = Depends(veri
 async def create_webrtc_offer(
     device_name: str,
     body: WebRTCOfferReq,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    grant_token: str | None = Header(default=None, alias="grant_token"),
     session: AsyncSession = Depends(get_session),
 ):
     if not RTCPeerConnection or not RTCSessionDescription or not MediaPlayer:
@@ -159,13 +171,7 @@ async def create_webrtc_offer(
             detail="aiortc is not installed on the server",
         )
 
-    token = _parse_bearer(authorization)
-    grant = _load_grant(token)
-    if grant.get("device_name") != device_name:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Grant token does not belong to this device",
-        )
+    _, _ = _validate_grant_for_device(device_name, grant_token)
 
     await _check_device_exists(session, device_name)
 
@@ -220,15 +226,9 @@ async def create_webrtc_offer(
 @router.post("/devices/{device_name}/webrtc/stop", response_model=WebRTCRevokePublic)
 async def stop_webrtc_offer(
     device_name: str,
-    authorization: str | None = Header(default=None, alias="Authorization"),
+    grant_token: str | None = Header(default=None, alias="grant_token"),
 ):
-    token = _parse_bearer(authorization)
-    grant = _load_grant(token)
-    if grant.get("device_name") != device_name:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Grant token does not belong to this device",
-        )
+    token, _ = _validate_grant_for_device(device_name, grant_token)
 
     await _close_peer(device_name)
     redis_client.delete(_grant_key(token))
