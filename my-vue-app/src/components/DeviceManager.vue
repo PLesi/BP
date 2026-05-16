@@ -414,13 +414,13 @@ async function removeOutput(outputId: number) {
 
 async function createTestDevice() {
   const n = devices.value.length + 1
-  const testName = `Test Device ${n}`
+  const testName = `udaq ${n}`
   const res = await fetch(`${API_BASE}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: testName,
-      slx_model: `TestDevice${n}.slx`,
+      slx_model: `PI_RED.slx`,
       device_type: 'sensor',
       maintenance_start: null,
       maintenance_end: null,
