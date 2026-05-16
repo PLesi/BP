@@ -34,6 +34,7 @@ const DEVICE_TYPES = ['sensor', 'actuator', 'controller', 'gateway']
 const formSchema = toTypedSchema(
   z.object({
     name: z.string().min(1, 'Name is required'),
+    slx_model: z.string().trim().min(1, 'SLX model is required'),
     device_type: z.string().optional(),
     maintenance_start: z.string().optional(),
     maintenance_end: z.string().optional(),
@@ -56,6 +57,7 @@ const onSubmit = form.handleSubmit(async (values) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: values.name,
+        slx_model: values.slx_model,
         device_type: values.device_type ?? null,
         maintenance_start: values.maintenance_start || null,
         maintenance_end: values.maintenance_end || null,
@@ -90,6 +92,16 @@ const onSubmit = form.handleSubmit(async (values) => {
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input placeholder="e.g. Sensor A1" v-bind="componentField" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          </FormField>
+
+          <FormField v-slot="{ componentField }" name="slx_model">
+            <FormItem>
+              <FormLabel>SLX Model</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g. MyModel.slx" v-bind="componentField" />
               </FormControl>
               <FormMessage />
             </FormItem>

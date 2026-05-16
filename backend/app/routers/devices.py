@@ -41,9 +41,11 @@ async def create_device(
     clean_device_type = None
     if device.device_type:
         clean_device_type = device.device_type.strip() or None
+    clean_slx_model = device.slx_model.strip()
 
     db_device = Device(
         name=device.name,
+        slx_model=clean_slx_model,
         device_type=clean_device_type,
         maintenance_start=device.maintenance_start,
         maintenance_end=device.maintenance_end,
@@ -70,6 +72,7 @@ async def update_device(
         )
     
     db_device.name = device.name
+    db_device.slx_model = device.slx_model.strip()
     if "device_type" in device.model_fields_set:
         if device.device_type is None:
             db_device.device_type = None

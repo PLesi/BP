@@ -130,7 +130,14 @@ async def get_server_devices(
             continue
 
         # Build model name for Simulink check
-        slx_model = device.name if device.name.endswith(".slx") else f"{device.name}.slx"
+        if not device.slx_model:
+            _log.info(
+                "[get_server_devices] device=%r online=%s usable=%s reason=%r",
+                device.name, False, False, "Missing slx_model",
+            )
+            continue
+
+        slx_model = device.slx_model
 
         res = check_device_online(port=device.config.port, slx_model=slx_model)
         _log.info(

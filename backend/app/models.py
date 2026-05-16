@@ -14,6 +14,7 @@ class Device(SQLModel, table=True):
     __tablename__ = "devices"
     id: int | None = Field(default=None, primary_key=True)
     name: str
+    slx_model: str | None = None
     device_type: str | None = None
     maintenance_start: time | None = None
     maintenance_end: time | None = None
@@ -111,6 +112,7 @@ class ConfigPublic(BaseModel):
 class DeviceDetailPublic(BaseModel):
     id: int
     name: str
+    slx_model: str | None = None
     device_type: str | None = None
     maintenance_start: time | None = None
     maintenance_end: time | None = None
@@ -122,6 +124,7 @@ class DeviceDetailPublic(BaseModel):
 class DevicePublic(BaseModel):
     id: int
     name: str
+    slx_model: str | None = None
     device_type: str | None = None
     maintenance_start: time | None = None
     maintenance_end: time | None = None
@@ -228,9 +231,18 @@ class InputLimitCreate(BaseModel):
 
 class DeviceCreate(BaseModel):
     name: str
+    slx_model: str
     device_type: str | None = None
     maintenance_start: time | None = None
     maintenance_end: time | None = None
+
+    @field_validator("slx_model")
+    @classmethod
+    def validate_slx_model(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("slx_model must not be empty")
+        return cleaned
 
 class ConfigCreate(BaseModel):
     device_id: int

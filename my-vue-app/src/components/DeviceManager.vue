@@ -66,6 +66,7 @@ interface DeviceConfig {
 interface Device {
   id: number
   name: string
+  slx_model: string | null
   device_type: string | null
   maintenance_start: string | null
   maintenance_end: string | null
@@ -94,6 +95,7 @@ const OTHER_SOFTWARE_VALUE = '__other__'
 
 const form = ref({
   name: '',
+  slx_model: '',
   device_type: '',
   maintenance_start: '',
   maintenance_end: '',
@@ -154,6 +156,7 @@ function selectDevice(device: Device) {
   ioSuccess.value = null
   form.value = {
     name: device.name,
+    slx_model: device.slx_model ?? '',
     device_type: device.device_type ?? '',
     maintenance_start: device.maintenance_start ? device.maintenance_start.slice(0, 5) : '',
     maintenance_end: device.maintenance_end ? device.maintenance_end.slice(0, 5) : '',
@@ -183,6 +186,7 @@ function clickNew() {
   ioSuccess.value = null
   form.value = {
     name: '',
+    slx_model: '',
     device_type: '',
     maintenance_start: '',
     maintenance_end: '',
@@ -410,11 +414,13 @@ async function removeOutput(outputId: number) {
 
 async function createTestDevice() {
   const n = devices.value.length + 1
+  const testName = `Test Device ${n}`
   const res = await fetch(`${API_BASE}/devices`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      name: `Test Device ${n}`,
+      name: testName,
+      slx_model: `TestDevice${n}.slx`,
       device_type: 'sensor',
       maintenance_start: null,
       maintenance_end: null,
@@ -422,7 +428,7 @@ async function createTestDevice() {
   })
   if (!res.ok) return
   await fetchDevices()
-  const created = devices.value.find((d) => d.name === `Test Device ${n}`)
+  const created = devices.value.find((d) => d.name === testName)
   if (created) selectDevice(created)
 }
 
@@ -454,6 +460,10 @@ async function save() {
     saveError.value = 'Name is required.'
     return
   }
+  if (!form.value.slx_model.trim()) {
+    saveError.value = 'SLX model is required.'
+    return
+  }
 
   loading.value = true
   saveError.value = null
@@ -461,6 +471,7 @@ async function save() {
 
   const payload = {
     name: form.value.name.trim(),
+    slx_model: form.value.slx_model.trim(),
     device_type: form.value.device_type.trim() || null,
     maintenance_start: form.value.maintenance_start || null,
     maintenance_end: form.value.maintenance_end || null,
@@ -618,6 +629,16 @@ onMounted(fetchAll)
               <Input
                 v-model="form.name"
                 placeholder="Device name"
+                :disabled="!isEditing"
+                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+              />
+            </div>
+
+            <div class="space-y-1.5 col-span-2">
+              <Label class="text-zinc-400 text-sm">SLX Model</Label>
+              <Input
+                v-model="form.slx_model"
+                placeholder="e.g. MyModel.slx"
                 :disabled="!isEditing"
                 class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
