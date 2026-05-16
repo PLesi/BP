@@ -285,7 +285,7 @@ async def create_webrtc_offer(
     await _close_peer(device_name)
 
     try:
-        player = MediaPlayer(stream_url, format="mjpeg")
+        player = MediaPlayer(stream_url)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
