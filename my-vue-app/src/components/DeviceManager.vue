@@ -415,21 +415,108 @@ async function removeOutput(outputId: number) {
 async function createTestDevice() {
   const n = devices.value.length + 1
   const testName = `udaq ${n}`
-  const res = await fetch(`${API_BASE}/devices`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: testName,
-      slx_model: `PI_RED.slx`,
-      device_type: 'sensor',
-      maintenance_start: null,
-      maintenance_end: null,
-    }),
-  })
-  if (!res.ok) return
-  await fetchDevices()
-  const created = devices.value.find((d) => d.name === testName)
-  if (created) selectDevice(created)
+  saveError.value = null
+  ioError.value = null
+  ioSuccess.value = null
+
+  try {
+    const devRes = await fetch(`${API_BASE}/devices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: testName,
+        slx_model: 'PI_RED.slx',
+        device_type: 'controller',
+        maintenance_start: null,
+        maintenance_end: null,
+      }),
+    })
+    if (!devRes.ok) {
+      const data = await devRes.json().catch(() => ({}))
+      throw new Error(data?.detail ?? `Device create failed (${devRes.status})`)
+    }
+
+    const createdDevice: Device = await devRes.json()
+
+    const configRes = await fetch(`${API_BASE}/configs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: createdDevice.id,
+        port: '/dev/ttyUSB0',
+        output_path: 'out.txt',
+        software_id: null,
+        time_limit: {
+          period: 60,
+          frequency: 10,
+        },
+      }),
+    })
+    if (!configRes.ok) {
+      const data = await configRes.json().catch(() => ({}))
+      throw new Error(data?.detail ?? `Config create failed (${configRes.status})`)
+    }
+
+    const cfg = await configRes.json()
+    const configId = cfg.id as number
+
+    const inputs = [
+      { name: 'bulb', type: 'number', input_limit: { min: 0, max: 100 } },
+      { name: 'fan', type: 'number', input_limit: { min: 0, max: 100 } },
+      { name: 'led', type: 'number', input_limit: { min: 0, max: 100 } },
+      { name: 'reg_signal', type: 'string', input_limit: null },
+      { name: 'reg_target', type: 'number', input_limit: null },
+      { name: 'Kc', type: 'number', input_limit: null },
+      { name: 'Ti', type: 'number', input_limit: null },
+      { name: 'U_min', type: 'number', input_limit: null },
+      { name: 'U_max', type: 'number', input_limit: null },
+    ]
+
+    for (const inputDef of inputs) {
+      const inputRes = await fetch(`${API_BASE}/inputs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_id: configId,
+          name: inputDef.name,
+          type: inputDef.type,
+          input_limit: inputDef.input_limit,
+        }),
+      })
+      if (!inputRes.ok) {
+        const data = await inputRes.json().catch(() => ({}))
+        throw new Error(data?.detail ?? `Input '${inputDef.name}' create failed (${inputRes.status})`)
+      }
+    }
+
+    const outputs = [
+      { name: 'reg_output', type: 'number' },
+      { name: 'light_intensity', type: 'number' },
+    ]
+
+    for (const outputDef of outputs) {
+      const outputRes = await fetch(`${API_BASE}/outputs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config_id: configId,
+          name: outputDef.name,
+          type: outputDef.type,
+        }),
+      })
+      if (!outputRes.ok) {
+        const data = await outputRes.json().catch(() => ({}))
+        throw new Error(data?.detail ?? `Output '${outputDef.name}' create failed (${outputRes.status})`)
+      }
+    }
+
+    await fetchDevices()
+    const created = devices.value.find((d) => d.id === createdDevice.id)
+    if (created) selectDevice(created)
+    ioSuccess.value = 'Quick test device created with config, inputs and outputs.'
+  } catch (e: any) {
+    saveError.value = e.message
+  }
 }
 
 async function deleteDevice() {
