@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
 import os
 import uuid
 import json
 import asyncio
 from datetime import datetime, UTC, timedelta
 from pydantic import ValidationError
+
+_log = logging.getLogger(__name__)
 
 from ..db import get_session
 from ..models import (
@@ -130,6 +133,10 @@ async def get_server_devices(
         slx_model = device.name if device.name.endswith(".slx") else f"{device.name}.slx"
 
         res = check_device_online(port=device.config.port, slx_model=slx_model)
+        _log.info(
+            "[get_server_devices] device=%r online=%s usable=%s reason=%r",
+            device.name, res.get("online"), res.get("usable"), res.get("reason"),
+        )
 
         # check_device_online returns dict, not object
         if not (res.get("online") and res.get("usable")):

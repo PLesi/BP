@@ -21,6 +21,9 @@ async def get_devices_with_details(session: AsyncSession) -> list[Device]:
 
 
 import os
+import logging
+
+_log = logging.getLogger(__name__)
 
 def check_device_online(port: str, slx_model: str) -> dict:
     """
@@ -29,33 +32,54 @@ def check_device_online(port: str, slx_model: str) -> dict:
     Returns:
         {"online": bool, "usable": bool, "reason": str}
     """
+    _log.debug("[check_device_online] port=%r slx_model=%r", port, slx_model)
+
     try:
         import matlab.engine
     except ImportError:
-        return {"online": False, "usable": False, "reason": "MATLAB engine not installed"}
+        reason = "MATLAB engine not installed"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": False, "usable": False, "reason": reason}
 
     # 1. Serial port (fyzický HW)
     if not os.path.exists(port):
-        return {"online": False, "usable": False, "reason": f"Port {port} not found"}
+        reason = f"Port {port} not found"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": False, "usable": False, "reason": reason}
+
+    _log.debug("[check_device_online] port %r exists", port)
 
     # 2. MATLAB engine
     try:
         engines = matlab.engine.find_matlab()
     except Exception as e:
-        return {"online": False, "usable": False, "reason": f"MATLAB engine error: {e}"}
+        reason = f"MATLAB engine error: {e}"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": False, "usable": False, "reason": reason}
+
+    _log.debug("[check_device_online] MATLAB engines found: %r", engines)
 
     if not engines:
-        return {"online": False, "usable": False, "reason": "No running MATLAB engine found"}
+        reason = "No running MATLAB engine found"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": False, "usable": False, "reason": reason}
 
     # 3. Simulink model status
     try:
         matlab_instance = matlab.engine.connect_matlab(engines[0])
+        _log.debug("[check_device_online] connected to engine %r", engines[0])
         matlab_instance.load_system(slx_model, nargout=0)
         status = matlab_instance.get_param(slx_model.replace(".slx", ""), "SimulationStatus")
+        _log.debug("[check_device_online] SimulationStatus=%r", status)
     except Exception as e:
-        return {"online": True, "usable": False, "reason": f"Simulink model error: {e}"}
+        reason = f"Simulink model error: {e}"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": True, "usable": False, "reason": reason}
 
     if status == "running":
-        return {"online": True, "usable": False, "reason": "Device busy - simulation already running"}
+        reason = "Device busy - simulation already running"
+        _log.warning("[check_device_online] FAIL – %s", reason)
+        return {"online": True, "usable": False, "reason": reason}
 
+    _log.debug("[check_device_online] OK – device ready")
     return {"online": True, "usable": True, "reason": "Device ready"}
