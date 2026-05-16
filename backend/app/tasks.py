@@ -83,6 +83,9 @@ async def run_experiment(experiment: dict):
         '--device-id', str(device_id),
         '--device-name', experiment.get("device_name", ""),
         '--software-name', experiment.get("software_name", ""),
+        '--port', experiment.get("port", "/dev/ttyUSB0"),
+        '--output-path', experiment.get("output_path", "out.txt"),
+        '--slx-model', experiment.get("slx_model", "PI_RED.slx"),
         '--input-arguments', json.dumps(experiment.get("input_arguments", {})),
         '--output-arguments', json.dumps(experiment.get("output_arguments", [])),
         '--simulation-time', str(experiment.get("simulation_time", 0)),
@@ -112,6 +115,43 @@ async def run_experiment(experiment: dict):
             })
     
     await process.wait()
+
+    if process.returncode != 0:
+        stderr_output = await process.stderr.read()
+        error_text = stderr_output.decode().strip() if stderr_output else "Unknown execution error"
+        redis_client.set(
+            experiment_key,
+            json.dumps(
+                {
+                    "device_name": experiment.get("device_name", ""),
+                    "software_name": experiment.get("software_name", ""),
+                    "run": {
+                        "input_history": [
+                            {
+                                "command": "start",
+                                "input_args": experiment.get("input_arguments", {}),
+                                "applied_at": 0.0,
+                            }
+                        ],
+                        "output_history": output_history,
+                        "setpoint_changes": experiment.get("setpoint_changes"),
+                    },
+                    "started_at": started_at,
+                    "finished_at": datetime.now(UTC).isoformat(),
+                    "finish_reason": f"failed: {error_text}",
+                }
+            ),
+        )
+        await ws_manager.send_message(
+            task_id,
+            {
+                "status": "failed",
+                "device_id": device_id,
+                "error": error_text,
+            },
+        )
+        return
+
     redis_client.set(
         experiment_key,
         json.dumps(

@@ -11,6 +11,9 @@ parser.add_argument('--task-id', required=True)
 parser.add_argument('--device-id', required=True)
 parser.add_argument('--device-name', required=True)
 parser.add_argument('--software-name', required=True)
+parser.add_argument('--port', required=False, default='/dev/ttyUSB0')
+parser.add_argument('--output-path', required=False, default='out.txt')
+parser.add_argument('--slx-model', required=False, default='PI_RED.slx')
 parser.add_argument('--input-arguments', required=True)
 parser.add_argument('--output-arguments', required=True)
 parser.add_argument('--simulation-time', required=True)
@@ -67,8 +70,9 @@ start_script = os.path.join(
 
 cmd = [
     pick_python_with_matlab(), start_script,
-    '--port=/dev/ttyUSB0',
-    '--output=out.txt',
+    f'--port={args.port}',
+    f'--output={args.output_path}',
+    f'--slx-model={args.slx_model}',
     f'--input={input_str}',
     f'--duration={simulation_time}',
     f'--sampletime={sample_rate}',

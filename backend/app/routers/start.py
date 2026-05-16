@@ -3,6 +3,8 @@
 # example command: python3 start.py --port=/dev/ttyUSB0 --output=out.txt --input=bulb:100,fan:0,led:100,reg_output:light_intensity,reg_signal:bulb,reg_target:35,Kc:2,Ti:1,U_min:0,U_max:5 --duration=10 --sampletime=10
 
 import time
+import os
+import sys
 
 # Custom logging mechanism for this script
 import logging
@@ -30,6 +32,7 @@ parser.add_argument('--output', type=str, help='Path to output file e.g. output.
 parser.add_argument('--input', type=str, help='Comma-separated key:value pairs of input parameters. e.g.: in_bulb:100,in_fan:100 etc...')
 parser.add_argument('--duration', type=int, help='Duration of the simulation in seconds.')
 parser.add_argument('--sampletime', type=float, help='Sampling time in milliseconds.')
+parser.add_argument('--slx-model', type=str, default='PI_RED.slx', help='Simulink model filename (e.g. PI_RED.slx)')
 
 args = parser.parse_args()
 inputs = dict()
@@ -122,16 +125,21 @@ matlab_instance.workspace['regparams'] = {
 logger.info('MATLAB workspace variables set...')
 logger.info('trying to run Simuling simulation on uDAQ28LT_system...')
 
-matlab_instance.load_system("PI_RED.slx");
+slx_model = args.slx_model.strip() if args.slx_model else 'PI_RED.slx'
+model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
+model_name = os.path.splitext(os.path.basename(model_file))[0]
+
+matlab_instance.load_system(model_file)
 
 try:
-    matlab_instance.set_param("PI_RED",'SimulationCommand','start', nargout=0)
-    
+    matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
 except Exception as ex:
-    logger.info('ERROR: exception while starting simulation.')
+    logger.exception('ERROR: exception while starting simulation.')
+    matlab_instance.quit()
+    raise
     
 # logger.info('simulation is running, hold on...')
-while matlab_instance.get_param("PI_RED",'SimulationStatus') != 'stopped':
+while matlab_instance.get_param(model_name, 'SimulationStatus') != 'stopped':
     pass
 
 logger.info('simulation stopped, closing MATLAB instance...')
