@@ -48,6 +48,103 @@ def _grant_key(token: str) -> str:
     return f"webrtc:grant:{token}"
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _enhance_video_sdp(sdp: str) -> str:
+    """Apply conservative bitrate hints for common video codecs in SDP answer."""
+    max_kbps = _env_int("WEBRTC_VIDEO_MAX_BITRATE_KBPS", 5000)
+    min_kbps = _env_int("WEBRTC_VIDEO_MIN_BITRATE_KBPS", 1200)
+    start_kbps = _env_int("WEBRTC_VIDEO_START_BITRATE_KBPS", 2500)
+
+    lines = sdp.split("\r\n")
+    if not lines:
+        return sdp
+
+    # Locate the first video m-section boundaries.
+    m_video_idx = -1
+    for i, line in enumerate(lines):
+        if line.startswith("m=video "):
+            m_video_idx = i
+            break
+    if m_video_idx == -1:
+        return sdp
+
+    section_end = len(lines)
+    for i in range(m_video_idx + 1, len(lines)):
+        if lines[i].startswith("m="):
+            section_end = i
+            break
+
+    video_lines = lines[m_video_idx:section_end]
+
+    # Determine payload id for preferred codecs.
+    preferred_payload = None
+    for codec in ("H264", "VP8", "VP9", "AV1"):
+        for vline in video_lines:
+            if vline.startswith("a=rtpmap:") and (f" {codec}/" in vline):
+                payload = vline.split(":", 1)[1].split(" ", 1)[0].strip()
+                preferred_payload = payload
+                break
+        if preferred_payload:
+            break
+
+    if not preferred_payload:
+        return sdp
+
+    # Add bandwidth lines once per video section.
+    has_as = any(vline.startswith("b=AS:") for vline in video_lines)
+    has_tias = any(vline.startswith("b=TIAS:") for vline in video_lines)
+
+    insert_at = 1
+    for i, vline in enumerate(video_lines):
+        if vline.startswith("c="):
+            insert_at = i + 1
+            break
+
+    if not has_as:
+        video_lines.insert(insert_at, f"b=AS:{max_kbps}")
+        insert_at += 1
+    if not has_tias:
+        video_lines.insert(insert_at, f"b=TIAS:{max_kbps * 1000}")
+
+    # Add or extend fmtp line for selected payload.
+    fmtp_prefix = f"a=fmtp:{preferred_payload} "
+    fmtp_idx = -1
+    for i, vline in enumerate(video_lines):
+        if vline.startswith(fmtp_prefix):
+            fmtp_idx = i
+            break
+
+    bitrate_params = (
+        f"x-google-start-bitrate={start_kbps};"
+        f"x-google-min-bitrate={min_kbps};"
+        f"x-google-max-bitrate={max_kbps}"
+    )
+
+    if fmtp_idx != -1:
+        current = video_lines[fmtp_idx]
+        if "x-google-max-bitrate" not in current:
+            separator = ";" if not current.endswith(";") else ""
+            video_lines[fmtp_idx] = f"{current}{separator}{bitrate_params}"
+    else:
+        # Add a new fmtp line after matching rtpmap.
+        rtpmap_idx = -1
+        for i, vline in enumerate(video_lines):
+            if vline.startswith(f"a=rtpmap:{preferred_payload} "):
+                rtpmap_idx = i
+                break
+        if rtpmap_idx != -1:
+            video_lines.insert(rtpmap_idx + 1, f"a=fmtp:{preferred_payload} {bitrate_params}")
+
+    lines[m_video_idx:section_end] = video_lines
+    return "\r\n".join(lines)
+
+
 def _parse_grant_token(grant_token: str | None) -> str:
     if not grant_token:
         raise HTTPException(
@@ -212,7 +309,11 @@ async def create_webrtc_offer(
     try:
         await pc.setRemoteDescription(RTCSessionDescription(sdp=body.sdp, type=body.type))
         answer = await pc.createAnswer()
-        await pc.setLocalDescription(answer)
+        tuned_answer = RTCSessionDescription(
+            sdp=_enhance_video_sdp(answer.sdp),
+            type=answer.type,
+        )
+        await pc.setLocalDescription(tuned_answer)
     except Exception as exc:
         await pc.close()
         raise HTTPException(

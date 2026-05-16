@@ -78,8 +78,14 @@
   <h3>Log</h3>
   <pre id="log"></pre>
 
+  <h3>Connection stats</h3>
+  <pre id="stats">Not connected.</pre>
+
   <script>
     let pc = null;
+    let statsTimer = null;
+    let prevInboundBytes = null;
+    let prevInboundTs = null;
 
     const el = {
       baseUrl: document.getElementById('baseUrl'),
@@ -89,10 +95,92 @@
       iceUrl: document.getElementById('iceUrl'),
       video: document.getElementById('video'),
       log: document.getElementById('log'),
+      stats: document.getElementById('stats'),
       btnGrant: document.getElementById('btnGrant'),
       btnStart: document.getElementById('btnStart'),
       btnStop: document.getElementById('btnStop')
     };
+
+    function resetStats() {
+      prevInboundBytes = null;
+      prevInboundTs = null;
+      el.stats.textContent = 'Not connected.';
+    }
+
+    function stopStatsPolling() {
+      if (statsTimer) {
+        clearInterval(statsTimer);
+        statsTimer = null;
+      }
+    }
+
+    async function updateStats() {
+      if (!pc || pc.connectionState === 'closed') {
+        return;
+      }
+
+      const report = await pc.getStats();
+      let inbound = null;
+      let candidatePair = null;
+
+      report.forEach((s) => {
+        if (!inbound && s.type === 'inbound-rtp' && s.kind === 'video') {
+          inbound = s;
+        }
+        if (!candidatePair && s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') {
+          candidatePair = s;
+        }
+      });
+
+      if (!inbound) {
+        el.stats.textContent = 'Connected, waiting for inbound video stats...';
+        return;
+      }
+
+      let bitrateKbps = 0;
+      if (prevInboundBytes !== null && prevInboundTs !== null) {
+        const bytesDelta = inbound.bytesReceived - prevInboundBytes;
+        const msDelta = inbound.timestamp - prevInboundTs;
+        if (msDelta > 0 && bytesDelta >= 0) {
+          bitrateKbps = (bytesDelta * 8) / msDelta;
+        }
+      }
+      prevInboundBytes = inbound.bytesReceived;
+      prevInboundTs = inbound.timestamp;
+
+      const width = inbound.frameWidth || 0;
+      const height = inbound.frameHeight || 0;
+      const fps = inbound.framesPerSecond || 0;
+      const packetsLost = inbound.packetsLost || 0;
+      const packetsReceived = inbound.packetsReceived || 0;
+      const lossPct = (packetsLost + packetsReceived) > 0
+        ? (packetsLost * 100) / (packetsLost + packetsReceived)
+        : 0;
+      const jitterMs = inbound.jitter ? inbound.jitter * 1000 : 0;
+      const rttMs = candidatePair && candidatePair.currentRoundTripTime
+        ? candidatePair.currentRoundTripTime * 1000
+        : 0;
+
+      el.stats.textContent = [
+        `State: ${pc.connectionState}`,
+        `Resolution: ${width}x${height}`,
+        `FPS: ${fps.toFixed(1)}`,
+        `Bitrate: ${bitrateKbps.toFixed(0)} kbps`,
+        `Packets lost: ${packetsLost} (${lossPct.toFixed(2)}%)`,
+        `Jitter: ${jitterMs.toFixed(1)} ms`,
+        `RTT: ${rttMs.toFixed(1)} ms`
+      ].join('\n');
+    }
+
+    function startStatsPolling() {
+      stopStatsPolling();
+      resetStats();
+      statsTimer = setInterval(() => {
+        updateStats().catch((e) => {
+          el.stats.textContent = `Stats error: ${e.message}`;
+        });
+      }, 2000);
+    }
 
     function log(msg) {
       const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -150,6 +238,9 @@
         pc.close();
       }
 
+      stopStatsPolling();
+      resetStats();
+
       const iceServers = [];
       if (iceUrl) {
         iceServers.push({ urls: iceUrl });
@@ -164,6 +255,12 @@
 
       pc.onconnectionstatechange = () => {
         log(`Connection state: ${pc.connectionState}`);
+        if (pc.connectionState === 'connected') {
+          startStatsPolling();
+        }
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed' || pc.connectionState === 'disconnected') {
+          stopStatsPolling();
+        }
       };
 
       // We want to receive video from server.
@@ -215,6 +312,8 @@
         pc.close();
         pc = null;
       }
+      stopStatsPolling();
+      resetStats();
       el.video.srcObject = null;
       log('Local connection closed.');
     }
