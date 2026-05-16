@@ -125,9 +125,13 @@ matlab_instance.workspace['regparams'] = {
 logger.info('MATLAB workspace variables set...')
 logger.info('trying to run Simuling simulation on uDAQ28LT_system...')
 
-slx_model = args.slx_model.strip() if args.slx_model else 'PI_RED.slx'
-model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
-model_name = os.path.splitext(os.path.basename(model_file))[0]
+# Custom model hook kept for later use.
+# slx_model = args.slx_model.strip() if args.slx_model else 'PI_RED.slx'
+# model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
+# model_name = os.path.splitext(os.path.basename(model_file))[0]
+
+model_file = "PI_RED.slx"
+model_name = "PI_RED"
 
 matlab_instance.load_system(model_file)
 
