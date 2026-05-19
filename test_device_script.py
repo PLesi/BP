@@ -63,9 +63,6 @@ input_str = ','.join(
     f"{k}:{v['value']}" for k, v in input_arguments.items()
 )
 
-print(f"DEBUG: input_arguments dict: {input_arguments}", flush=True)
-print(f"DEBUG: input_str for start.py: {input_str}", flush=True)
-
 start_script = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'backend', 'app', 'routers', 'start.py'

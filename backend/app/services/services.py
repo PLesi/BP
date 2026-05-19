@@ -59,14 +59,6 @@ async def validate_experiment(
     - Input hodnoty sú v limitoch
     - simulation_time / sample_rate sú v rámci time_limit
     """
-    
-    # Debug logging
-    print(f"\n{'='*60}", flush=True)
-    print(f"DEBUG: validate_experiment called", flush=True)
-    print(f"  device_name: {device_name}", flush=True)
-    print(f"  input_arguments: {input_arguments}", flush=True)
-    print(f"  input_arguments keys: {list(input_arguments.keys())}", flush=True)
-    print(f"{'='*60}\n", flush=True)
 
     # 1. Načítaj device by name s config a všetkými vzťahmi
     stmt = (
@@ -93,14 +85,6 @@ async def validate_experiment(
             detail="Device has no configuration"
         )
 
-    print(f"DEBUG: Device config exists", flush=True)
-    print(f"DEBUG: device.config.inputs type: {type(device.config.inputs)}", flush=True)
-    print(f"DEBUG: device.config.inputs: {device.config.inputs}", flush=True)
-    print(f"DEBUG: Number of inputs: {len(device.config.inputs) if device.config.inputs else 0}", flush=True)
-    if device.config.inputs:
-        for inp in device.config.inputs:
-            print(f"DEBUG:   Input: name={inp.name}, type={inp.type}, id={inp.id}", flush=True)
-
     # 2. Validuj time_limit
     if device.config.time_limit:
         if simulation_time > device.config.time_limit.period:
@@ -118,28 +102,19 @@ async def validate_experiment(
     required_inputs = {inp.name: inp for inp in device.config.inputs}
 
     # 3.4 Validuj, že žiadny input name v DB nie je reserved keyword
-    print(f"DEBUG: Device {device_name} (ID: {device.id}) has {len(required_inputs)} configured inputs", flush=True)
-    print(f"DEBUG: Required inputs from DB: {list(required_inputs.keys())}", flush=True)
     for input_name in required_inputs:
-        is_reserved = input_name.lower() in RESERVED_KEYWORDS
-        print(f"DEBUG:   '{input_name}' - is reserved? {is_reserved}", flush=True)
-        if is_reserved:
-            print(f"DEBUG: ERROR - Found reserved keyword in DB config: {input_name}", flush=True)
+        if input_name.lower() in RESERVED_KEYWORDS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"❌ Device configuration error: Input '{input_name}' is a reserved keyword. Device admin must remove or rename this input."
+                detail=f"Device configuration error: Input '{input_name}' is a reserved keyword. Please remove or rename this input."
             )
 
     # 3.5 Validuj, že žiadny input name nie je reserved keyword
-    print(f"DEBUG: Validating {len(input_arguments)} submitted input arguments", flush=True)
     for input_name in input_arguments:
-        is_reserved = input_name.lower() in RESERVED_KEYWORDS
-        print(f"DEBUG:   '{input_name}' - is reserved? {is_reserved}", flush=True)
-        if is_reserved:
-            print(f"DEBUG: ERROR - Found reserved keyword in submission: {input_name}", flush=True)
+        if input_name.lower() in RESERVED_KEYWORDS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"❌ Input name '{input_name}' is a reserved keyword and cannot be used"
+                detail=f"Input name '{input_name}' is a reserved keyword and cannot be used"
             )
 
     # 4. Skontroluj, že všetky required inputy sú prítomné
