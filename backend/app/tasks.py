@@ -160,14 +160,22 @@ async def run_experiment(experiment: dict):
 
     # Validate that input arguments don't use reserved keywords
     input_arguments = experiment.get("input_arguments", {})
+    
+    debug_msg = f"run_experiment: task_id={task_id}, input_arguments keys={list(input_arguments.keys())}"
+    print(f"DEBUG: {debug_msg}", flush=True)
+    await ws_manager.send_message(task_id, {"status": "debug", "device_id": device_id, "message": debug_msg})
+    
     for input_name in input_arguments:
-        if input_name.lower() in RESERVED_KEYWORDS:
+        is_reserved = input_name.lower() in RESERVED_KEYWORDS
+        debug_msg = f"Checking input '{input_name}' - is reserved? {is_reserved}"
+        print(f"DEBUG: {debug_msg}", flush=True)
+        await ws_manager.send_message(task_id, {"status": "debug", "device_id": device_id, "message": debug_msg})
+        
+        if is_reserved:
+            debug_msg = f"FOUND RESERVED KEYWORD: {input_name}"
+            print(f"DEBUG: {debug_msg}", flush=True)
             error_msg = f"Device configuration error: Input name '{input_name}' is a reserved keyword"
-            await ws_manager.send_message(task_id, {
-                "status": "error",
-                "device_id": device_id,
-                "error": error_msg
-            })
+            await ws_manager.send_message(task_id, {"status": "error", "device_id": device_id, "error": error_msg})
             redis_client.set(
                 experiment_key,
                 json.dumps({

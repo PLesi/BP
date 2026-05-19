@@ -19,6 +19,14 @@ async def run_experiment(
     experiment: ExperimentReq,
     session: AsyncSession = Depends(get_session)
 ):
+    print(f"\n{'='*60}", flush=True)
+    print(f"DEBUG: /experiments/run called", flush=True)
+    print(f"  device_name: {experiment.device_name}", flush=True)
+    print(f"  input_arguments keys: {list(experiment.input_arguments.keys())}", flush=True)
+    for k, v in experiment.input_arguments.items():
+        print(f"    - {k}: {v}", flush=True)
+    print(f"{'='*60}\n", flush=True)
+    
     device = await validate_experiment(
         session,
         device_name=experiment.device_name,
