@@ -7,7 +7,6 @@ import os
 import sys
 import json
 import re
-import csv
 
 # Custom logging mechanism for this script
 import logging
@@ -110,46 +109,12 @@ def _extract_numeric_outputs_from_matlab(matlab_instance):
 
 
 _NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
-_CSV_HEADERS = None
 
 
 def _extract_numeric_outputs_from_line(line: str, elapsed: float):
     raw = line.strip()
     if not raw:
         return None
-
-    global _CSV_HEADERS
-
-    if "," in raw:
-        try:
-            row = next(csv.reader([raw]))
-        except Exception:
-            row = None
-
-        if row:
-            stripped = [cell.strip() for cell in row]
-            numeric_values = [_coerce_numeric(cell) for cell in stripped]
-
-            # Header row: keep it for later mapping.
-            if any(value is None for value in numeric_values):
-                if all(cell and _coerce_numeric(cell) is None for cell in stripped):
-                    _CSV_HEADERS = stripped
-                return None
-
-            headers = _CSV_HEADERS
-            if headers and len(headers) == len(numeric_values):
-                point = {"time": round(elapsed, 6)}
-                for key, value in zip(headers, numeric_values, strict=False):
-                    if key and value is not None:
-                        point[key] = value
-                return point
-
-            # No headers available yet, use generic keys.
-            point = {"time": round(elapsed, 6)}
-            for index, value in enumerate(numeric_values, start=1):
-                if value is not None:
-                    point[f"v{index}"] = value
-            return point if len(point) > 1 else None
 
     try:
         parsed = json.loads(raw)
