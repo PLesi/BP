@@ -4,10 +4,93 @@ import asyncio
 from datetime import datetime, UTC
 import sys
 import os
+import re
 
 from .redis_client import redis_client
 from .websocket_manager import ws_manager
 from .services.services import calculate_estimated_wait_time
+
+
+_NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
+
+
+def _to_float(value):
+    try:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            s = value.strip().replace(',', '.')
+            if not s:
+                return None
+            return float(s)
+    except (TypeError, ValueError):
+        return None
+    return None
+
+
+def _chart_point_from_dict(data: dict) -> dict | None:
+    time_val = _to_float(data.get("time"))
+    if time_val is None:
+        return None
+
+    point = {"time": round(time_val, 6)}
+    has_numeric = False
+
+    for key, value in data.items():
+        if key in {"time", "status", "sim_status", "out_line", "log", "source", "error"}:
+            continue
+        num = _to_float(value)
+        if num is not None:
+            point[key] = num
+            has_numeric = True
+
+    return point if has_numeric else None
+
+
+def _chart_point_from_line(line: str, elapsed: float) -> dict | None:
+    raw = line.strip()
+    if not raw:
+        return None
+
+    # Try JSON line first.
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return _chart_point_from_dict(parsed)
+    except json.JSONDecodeError:
+        pass
+
+    # Parse key=value or key:value pairs.
+    pairs = {}
+    for token in re.split(r"[;,]\s*", raw):
+        if "=" in token:
+            k, v = token.split("=", 1)
+        elif ":" in token:
+            k, v = token.split(":", 1)
+        else:
+            continue
+        key = k.strip()
+        if not key:
+            continue
+        num = _to_float(v)
+        if num is not None:
+            pairs[key] = num
+
+    if pairs:
+        return {"time": round(elapsed, 6), **pairs}
+
+    # Fallback: if line contains only numbers/CSV-like tokens, map to v1..vN.
+    numbers = [_to_float(m.group(0)) for m in _NUM_RE.finditer(raw)]
+    values = [n for n in numbers if n is not None]
+    if values:
+        point = {"time": round(elapsed, 6)}
+        for idx, num in enumerate(values, start=1):
+            point[f"v{idx}"] = num
+        return point
+
+    return None
 
 def acquire_lock(device_id: int) -> bool:
     lock_key = f"device_lock:{device_id}"
@@ -58,6 +141,7 @@ async def run_experiment(experiment: dict):
     experiment_key = f"experiment:{task_id}"
     output_history: list[dict] = []
     started_at = datetime.now(UTC).isoformat()
+    run_start_ts = asyncio.get_running_loop().time()
 
     redis_client.set(
         experiment_key,
@@ -95,26 +179,110 @@ async def run_experiment(experiment: dict):
         stderr=asyncio.subprocess.PIPE
     )
 
-    async for line in process.stdout:
-        output = line.decode().strip()
-        print(f"Output: {output}")
-        try:
-            data = json.loads(output)
-            if isinstance(data, dict) and "time" in data:
-                output_history.append(data)
+    stdout_seen = False
+
+    async def send_running_with_chart(data: dict):
+        await ws_manager.send_message(task_id, {
+            "status": "running",
+            "device_id": device_id,
+            "data": data
+        })
+        chart_point = _chart_point_from_dict(data) if isinstance(data, dict) else None
+        if chart_point:
             await ws_manager.send_message(task_id, {
-                "status": "running",
+                "status": "chart_point",
                 "device_id": device_id,
-                "data": data                    
+                "data": chart_point,
             })
-        except json.JSONDecodeError:
-            await ws_manager.send_message(task_id, {
-                "status": "running",
-                "device_id": device_id,
-                "output": output                    
-            })
-    
+
+    async def stream_stdout():
+        nonlocal stdout_seen
+        if process.stdout is None:
+            return
+        async for line in process.stdout:
+            stdout_seen = True
+            output = line.decode().strip()
+            if not output:
+                continue
+            print(f"Output: {output}")
+            try:
+                data = json.loads(output)
+                if isinstance(data, dict) and "time" in data:
+                    output_history.append(data)
+                await send_running_with_chart(data)
+            except json.JSONDecodeError:
+                elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
+                chart_point = _chart_point_from_line(output, elapsed)
+                await ws_manager.send_message(task_id, {
+                    "status": "running",
+                    "device_id": device_id,
+                    "output": output
+                })
+                if chart_point:
+                    output_history.append(chart_point)
+                    await ws_manager.send_message(task_id, {
+                        "status": "chart_point",
+                        "device_id": device_id,
+                        "data": chart_point,
+                    })
+
+    async def stream_output_file_fallback():
+        # If nothing arrives on stdout, stream new lines from output file directly.
+        await asyncio.sleep(3)
+        if stdout_seen:
+            return
+
+        output_path = experiment.get("output_path")
+        if not output_path:
+            return
+
+        last_pos = 0
+        if os.path.exists(output_path):
+            try:
+                last_pos = os.path.getsize(output_path)
+            except OSError:
+                last_pos = 0
+
+        while process.returncode is None:
+            if os.path.exists(output_path):
+                try:
+                    with open(output_path, "r", encoding="utf-8", errors="replace") as out_file:
+                        out_file.seek(last_pos)
+                        chunk = out_file.read()
+                        last_pos = out_file.tell()
+                except OSError:
+                    chunk = ""
+
+                if chunk:
+                    elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
+                    for raw_line in chunk.splitlines():
+                        line = raw_line.strip()
+                        if not line:
+                            continue
+                        payload = {
+                            "time": elapsed,
+                            "out_line": line,
+                            "source": "output_file",
+                        }
+                        output_history.append(payload)
+                        await send_running_with_chart(payload)
+                        chart_point = _chart_point_from_line(line, elapsed)
+                        if chart_point:
+                            output_history.append(chart_point)
+                            await ws_manager.send_message(task_id, {
+                                "status": "chart_point",
+                                "device_id": device_id,
+                                "data": chart_point,
+                            })
+
+            await asyncio.sleep(0.5)
+
+    stdout_task = asyncio.create_task(stream_stdout())
+    fallback_task = asyncio.create_task(stream_output_file_fallback())
+
+    await stdout_task
     await process.wait()
+    await fallback_task
 
     if process.returncode != 0:
         stderr_output = await process.stderr.read()

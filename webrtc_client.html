@@ -326,6 +326,11 @@
         const safeDeviceId = msg.device_id ?? null;
         wsLog(`Message: ${JSON.stringify(msg)}`);
 
+        if (msg.status === 'chart_point' && msg.data && typeof msg.data === 'object') {
+          wsLog(`Chart point (normalized): device_id=${safeDeviceId}, ${JSON.stringify(msg.data)}`);
+          return;
+        }
+
         if (msg.status === 'running' && msg.data && typeof msg.data === 'object') {
           const point = extractChartPoint(msg.data);
           if (point) {
