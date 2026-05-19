@@ -268,27 +268,20 @@ model_name = "PI_RED"
 
 matlab_instance.load_system(model_file)
 
-# Debug: print model structure
+# Debug: check what's in outputs struct
 try:
-    diagnostic = matlab_instance.eval(
-        f"blocks = find_system('{model_name}', 'FindAll', 'on', 'FollowLinks', 'on'); "
-        "block_types = {{}}; "
-        "for i = 1:length(blocks) "
-        "  b = blocks(i); "
-        "  try "
-        "    type = get_param(b, 'BlockType'); "
-        "    if strcmp(type, 'ToWorkspace') || strcmp(type, 'ToFile') "
-        "      block_types{{end+1}} = type; "
-        "    end "
-        "  catch "
-        "  end "
-        "end "
-        "jsonencode(block_types)",
+    check = matlab_instance.eval(
+        "if exist('outputs','var'); "
+        "  jsonencode(fieldnames(outputs)); "
+        "else; "
+        "  '[]'; "
+        "end",
         nargout=1
     )
-    print(json.dumps({"diagnostic": "blocks_found", "types": json.loads(diagnostic) if diagnostic else []}), flush=True)
+    fields = json.loads(check) if check else []
+    print(json.dumps({"debug": "outputs_fields", "fields": fields}), flush=True)
 except Exception as ex:
-    print(json.dumps({"diagnostic": "error", "message": str(ex)}), flush=True)
+    print(json.dumps({"debug": "error", "message": str(ex)}), flush=True)
 
 try:
     matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
