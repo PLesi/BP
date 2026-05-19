@@ -268,6 +268,29 @@ model_name = "PI_RED"
 
 matlab_instance.load_system(model_file)
 
+# Debug: print model structure
+try:
+    diagnostic = matlab_instance.eval(
+        f"blocks = find_system('{model_name}', 'FindAll', 'on', 'FollowLinks', 'on'); "
+        "block_info = {}; "
+        "for i = 1:length(blocks); "
+        "  b = blocks(i); "
+        "  try; "
+        "    name = get_param(b, 'Name'); "
+        "    type = get_param(b, 'BlockType'); "
+        "    if strcmp(type, 'ToWorkspace'); "
+        "      varname = get_param(b, 'VariableName'); "
+        "      fprintf('TO_WORKSPACE: %s writes to variable: %s\\n', name, varname); "
+        "    end; "
+        "  catch; end; "
+        "end; "
+        "fprintf('Model blocks loaded.\\n'); "
+        "'done'",
+        nargout=1
+    )
+except Exception as ex:
+    logger.info(f"Diagnostic query failed: {ex}")
+
 try:
     matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
 except Exception as ex:
