@@ -177,9 +177,16 @@ logger.info(args)
 
 port = f"{args.port},{args.output}"
 
+# Resolve out_path against MATLAB's CWD so both MATLAB and Python use the same absolute path.
+if os.path.isabs(args.output):
+    out_path = args.output
+else:
+    matlab_cwd = matlab_instance.pwd()
+    out_path = os.path.join(matlab_cwd, args.output)
+
 # Simulation parameters as port, simulation time, sampling rate.
 matlab_instance.workspace['com_port'] = args.port  # COM port
-matlab_instance.workspace['out_path'] = args.output  # COM port
+matlab_instance.workspace['out_path'] = out_path
 
 matlab_instance.workspace['simparams'] = {
     't_sim':float(args.duration),  # Simulation time
@@ -245,16 +252,16 @@ except Exception as ex:
 # Emit heartbeat messages so WS clients receive real-time progress.
 start_ts = time.time()
 last_out_pos = 0
-if args.output and os.path.exists(args.output):
+if out_path and os.path.exists(out_path):
     # Start from EOF so WS gets only new lines from this run.
-    last_out_pos = os.path.getsize(args.output)
+    last_out_pos = os.path.getsize(out_path)
 
 while True:
     status = matlab_instance.get_param(model_name, 'SimulationStatus')
     elapsed = round(time.time() - start_ts, 2)
 
-    if args.output and os.path.exists(args.output):
-        with open(args.output, 'r', encoding='utf-8', errors='replace') as out_file:
+    if out_path and os.path.exists(out_path):
+        with open(out_path, 'r', encoding='utf-8', errors='replace') as out_file:
             out_file.seek(last_out_pos)
             chunk = out_file.read()
             last_out_pos = out_file.tell()
@@ -280,8 +287,8 @@ while True:
     time.sleep(1.0)
 
 # Flush final out.txt lines written right before simulation stop.
-if args.output and os.path.exists(args.output):
-    with open(args.output, 'r', encoding='utf-8', errors='replace') as out_file:
+if out_path and os.path.exists(out_path):
+    with open(out_path, 'r', encoding='utf-8', errors='replace') as out_file:
         out_file.seek(last_out_pos)
         tail_chunk = out_file.read()
 
