@@ -39,9 +39,16 @@ parser.add_argument('--slx-model', type=str, default='PI_RED.slx', help='Simulin
 args = parser.parse_args()
 inputs = dict()
 
+print(f"DEBUG start.py: args.input = {args.input}", flush=True)
+
 for keyval_pair in args.input.split(','):
     parameter = keyval_pair.split(':')
+    print(f"DEBUG start.py: parsing keyval_pair='{keyval_pair}' -> parameter={parameter}", flush=True)
     inputs[parameter[0]] = parameter[1]
+
+print(f"DEBUG start.py: Final inputs dict keys: {list(inputs.keys())}", flush=True)
+for k, v in inputs.items():
+    print(f"DEBUG start.py:   {k}={v}", flush=True)
 
 
 def _coerce_numeric(value):
