@@ -8,7 +8,7 @@ import re
 
 from .redis_client import redis_client
 from .websocket_manager import ws_manager
-from .services.services import calculate_estimated_wait_time
+from .services.services import calculate_estimated_wait_time, RESERVED_KEYWORDS
 
 
 LOCK_TTL_SECONDS = 6 * 60 * 60
@@ -157,6 +157,29 @@ async def run_experiment(experiment: dict):
     output_history: list[dict] = []
     started_at = datetime.now(UTC).isoformat()
     run_start_ts = asyncio.get_running_loop().time()
+
+    # Validate that input arguments don't use reserved keywords
+    input_arguments = experiment.get("input_arguments", {})
+    for input_name in input_arguments:
+        if input_name.lower() in RESERVED_KEYWORDS:
+            error_msg = f"Device configuration error: Input name '{input_name}' is a reserved keyword"
+            await ws_manager.send_message(task_id, {
+                "status": "error",
+                "device_id": device_id,
+                "error": error_msg
+            })
+            redis_client.set(
+                experiment_key,
+                json.dumps({
+                    "device_name": experiment.get("device_name", ""),
+                    "software_name": experiment.get("software_name", ""),
+                    "run": None,
+                    "started_at": started_at,
+                    "finished_at": datetime.now(UTC).isoformat(),
+                    "finish_reason": error_msg,
+                }),
+            )
+            return
 
     redis_client.set(
         experiment_key,

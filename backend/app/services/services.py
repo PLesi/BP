@@ -59,6 +59,9 @@ async def validate_experiment(
     - Input hodnoty sú v limitoch
     - simulation_time / sample_rate sú v rámci time_limit
     """
+    
+    # Debug logging
+    print(f"DEBUG: validate_experiment called with device_name={device_name}, input_arguments keys={list(input_arguments.keys())}", flush=True)
 
     # 1. Načítaj device by name s config a všetkými vzťahmi
     stmt = (
