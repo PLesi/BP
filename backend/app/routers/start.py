@@ -78,26 +78,25 @@ def _extract_numeric_outputs(outputs_obj):
 
 
 def _extract_numeric_outputs_from_matlab(matlab_instance, model_name):
-    """Read live output values from running Simulink blocks via RuntimeObject.
+    """Read the latest value written by each 'To Workspace' block during normal simulation.
 
-    This reads the current input to every 'To Workspace' block in the model,
-    which is the actual sensor/signal value at the current simulation step.
-    This works during simulation (unlike workspace variables which update only at end).
+    In normal sim mode (set_param 'start'), Simulink accumulates data in workspace arrays.
+    Reading field(end) gives the most recently written sample.
     """
     try:
+        # Get field names of the outputs struct, then read the last sample of each.
         encoded = matlab_instance.eval(
-            f"ro_blocks = find_system('{model_name}', 'BlockType', 'ToWorkspace'); "
-            "out_struct = struct(); "
-            "for k = 1:length(ro_blocks); "
-            "  ro = get_param(ro_blocks{k}, 'RuntimeObject'); "
-            "  if ~isempty(ro); "
-            "    try; "
-            "      varname = get_param(ro_blocks{k}, 'VariableName'); "
-            "      out_struct.(varname) = ro.OutputPort(1).Data; "
-            "    catch; end; "
-            "  end; "
-            "end; "
-            "jsonencode(out_struct)",
+            "if exist('outputs','var') && isstruct(outputs);"
+            "  flds = fieldnames(outputs);"
+            "  out_struct = struct();"
+            "  for k = 1:length(flds);"
+            "    v = outputs.(flds{k});"
+            "    if isnumeric(v) && ~isempty(v);"
+            "      out_struct.(flds{k}) = v(end);"
+            "    end;"
+            "  end;"
+            "  jsonencode(out_struct);"
+            "else; '{}'; end",
             nargout=1
         )
     except Exception:
@@ -304,10 +303,9 @@ while True:
                     print(json.dumps(payload), flush=True)
 
     payload = {"time": elapsed, "status": "running", "sim_status": status}
-    if status == 'running':
-        live_outputs = _extract_numeric_outputs_from_matlab(matlab_instance, model_name)
-        if live_outputs:
-            payload.update(live_outputs)
+    live_outputs = _extract_numeric_outputs_from_matlab(matlab_instance, model_name)
+    if live_outputs:
+        payload.update(live_outputs)
 
     print(json.dumps(payload), flush=True)
     if status == 'stopped':
