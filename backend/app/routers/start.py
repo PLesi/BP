@@ -42,6 +42,39 @@ for keyval_pair in args.input.split(','):
     parameter = keyval_pair.split(':')
     inputs[parameter[0]] = parameter[1]
 
+
+def _coerce_numeric(value):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    # matlab.double / list-like containers often come as one-element arrays.
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        first = value[0]
+        if isinstance(first, (list, tuple)) and first:
+            first = first[0]
+        return _coerce_numeric(first)
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_numeric_outputs(outputs_obj):
+    numeric = {}
+    if not isinstance(outputs_obj, dict):
+        return numeric
+
+    for key, value in outputs_obj.items():
+        num = _coerce_numeric(value)
+        if num is not None:
+            numeric[str(key)] = num
+    return numeric
+
 import matlab.engine
 
 logger.info('trying to connect MATLAB shared engine = \'iolabserver_engine\'')
@@ -165,7 +198,14 @@ while True:
                 if line.strip():
                     print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
 
-    print(json.dumps({"time": elapsed, "status": "running", "sim_status": status}), flush=True)
+    payload = {"time": elapsed, "status": "running", "sim_status": status}
+    try:
+        payload.update(_extract_numeric_outputs(matlab_instance.workspace['outputs']))
+    except Exception:
+        # Keep heartbeat flowing even if outputs are temporarily unavailable.
+        pass
+
+    print(json.dumps(payload), flush=True)
     if status == 'stopped':
         break
     time.sleep(1.0)
