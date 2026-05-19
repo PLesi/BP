@@ -272,18 +272,18 @@ matlab_instance.load_system(model_file)
 try:
     diagnostic = matlab_instance.eval(
         f"blocks = find_system('{model_name}', 'FindAll', 'on', 'FollowLinks', 'on'); "
-        "block_list = {{}}; "
-        "for i = 1:length(blocks); "
+        "block_types = {{}}; "
+        "for i = 1:length(blocks) "
         "  b = blocks(i); "
-        "  try; "
-        "    name = get_param(b, 'Name'); "
+        "  try "
         "    type = get_param(b, 'BlockType'); "
-        "    if strcmp(type, 'ToWorkspace') || strcmp(type, 'ToFile'); "
-        "      block_list{{end+1}} = type; "
-        "    end; "
-        "  catch; end; "
-        "end; "
-        "jsonencode(block_list)",
+        "    if strcmp(type, 'ToWorkspace') || strcmp(type, 'ToFile') "
+        "      block_types{{end+1}} = type; "
+        "    end "
+        "  catch "
+        "  end "
+        "end "
+        "jsonencode(block_types)",
         nargout=1
     )
     print(json.dumps({"diagnostic": "blocks_found", "types": json.loads(diagnostic) if diagnostic else []}), flush=True)
