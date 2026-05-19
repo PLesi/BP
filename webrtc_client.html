@@ -223,6 +223,32 @@
       console.log(line);
     }
 
+    function extractChartPoint(data) {
+      if (!data || typeof data !== 'object') {
+        return null;
+      }
+
+      const time = Number(data.time);
+      if (!Number.isFinite(time)) {
+        return null;
+      }
+
+      const point = { time };
+      let hasValue = false;
+
+      for (const [k, v] of Object.entries(data)) {
+        if (k === 'time' || k === 'status' || k === 'sim_status' || k === 'out_line' || k === 'log') {
+          continue;
+        }
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          point[k] = v;
+          hasValue = true;
+        }
+      }
+
+      return hasValue ? point : null;
+    }
+
     function endpoints() {
       const base = el.baseUrl.value.replace(/\/$/, '');
       const device = encodeURIComponent(el.deviceName.value.trim());
@@ -289,7 +315,23 @@
       ws.onclose = () => wsLog('WebSocket disconnected.');
       ws.onerror = () => wsLog('WebSocket error.');
       ws.onmessage = (ev) => {
-        wsLog(`Message: ${ev.data}`);
+        let msg;
+        try {
+          msg = JSON.parse(ev.data);
+        } catch (e) {
+          wsLog(`Invalid JSON from server: ${ev.data}`);
+          return;
+        }
+
+        const safeDeviceId = msg.device_id ?? null;
+        wsLog(`Message: ${JSON.stringify(msg)}`);
+
+        if (msg.status === 'running' && msg.data && typeof msg.data === 'object') {
+          const point = extractChartPoint(msg.data);
+          if (point) {
+            wsLog(`Chart point: device_id=${safeDeviceId}, t=${point.time}, values=${JSON.stringify(point)}`);
+          }
+        }
       };
     }
 
