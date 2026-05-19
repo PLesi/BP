@@ -39,16 +39,9 @@ parser.add_argument('--slx-model', type=str, default='PI_RED.slx', help='Simulin
 args = parser.parse_args()
 inputs = dict()
 
-print(f"DEBUG start.py: args.input = {args.input}", flush=True)
-
 for keyval_pair in args.input.split(','):
     parameter = keyval_pair.split(':')
-    print(f"DEBUG start.py: parsing keyval_pair='{keyval_pair}' -> parameter={parameter}", flush=True)
     inputs[parameter[0]] = parameter[1]
-
-print(f"DEBUG start.py: Final inputs dict keys: {list(inputs.keys())}", flush=True)
-for k, v in inputs.items():
-    print(f"DEBUG start.py:   {k}={v}", flush=True)
 
 
 def _coerce_numeric(value):
@@ -85,45 +78,12 @@ def _extract_numeric_outputs(outputs_obj):
 
 
 def _extract_numeric_outputs_from_matlab(matlab_instance, model_name):
-    """Read the latest value written by each 'To Workspace' block during normal simulation.
-
-    In normal sim mode (set_param 'start'), Simulink accumulates data in workspace arrays.
-    Reading field(end) gives the most recently written sample.
-    """
+    """Read latest output values directly from MATLAB workspace."""
     try:
-        # Get field names of the outputs struct, then read the last sample of each.
-        encoded = matlab_instance.eval(
-            "if exist('outputs','var') && isstruct(outputs);"
-            "  flds = fieldnames(outputs);"
-            "  out_struct = struct();"
-            "  for k = 1:length(flds);"
-            "    v = outputs.(flds{k});"
-            "    if isnumeric(v) && ~isempty(v);"
-            "      out_struct.(flds{k}) = v(end);"
-            "    end;"
-            "  end;"
-            "  jsonencode(out_struct);"
-            "else; '{}'; end",
-            nargout=1
-        )
+        outputs_obj = matlab_instance.workspace['outputs']
+        return _extract_numeric_outputs(outputs_obj)
     except Exception:
         return {}
-
-    if not encoded:
-        return {}
-
-    try:
-        parsed = json.loads(encoded)
-    except json.JSONDecodeError:
-        return {}
-
-    numeric = {}
-    if isinstance(parsed, dict):
-        for key, value in parsed.items():
-            num = _coerce_numeric(value)
-            if num is not None:
-                numeric[str(key)] = num
-    return numeric
 
 
 _NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
@@ -274,21 +234,6 @@ model_file = "PI_RED.slx"
 model_name = "PI_RED"
 
 matlab_instance.load_system(model_file)
-
-# Debug: check what's in outputs struct
-try:
-    check = matlab_instance.eval(
-        "if exist('outputs','var'); "
-        "  jsonencode(fieldnames(outputs)); "
-        "else; "
-        "  '[]'; "
-        "end",
-        nargout=1
-    )
-    fields = json.loads(check) if check else []
-    print(json.dumps({"debug": "outputs_fields", "fields": fields}), flush=True)
-except Exception as ex:
-    print(json.dumps({"debug": "error", "message": str(ex)}), flush=True)
 
 try:
     matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
