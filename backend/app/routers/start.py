@@ -77,11 +77,29 @@ def _extract_numeric_outputs(outputs_obj):
     return numeric
 
 
-def _extract_numeric_outputs_from_matlab(matlab_instance):
-    """Read MATLAB workspace `outputs` and convert it to flat numeric dict."""
+def _extract_numeric_outputs_from_matlab(matlab_instance, model_name):
+    """Read live output values from running Simulink blocks via RuntimeObject.
+
+    This reads the current input to every 'To Workspace' block in the model,
+    which is the actual sensor/signal value at the current simulation step.
+    This works during simulation (unlike workspace variables which update only at end).
+    """
     try:
-        # jsonencode in MATLAB gives us a stable transport format for Python.
-        encoded = matlab_instance.eval("jsonencode(outputs)", nargout=1)
+        encoded = matlab_instance.eval(
+            f"ro_blocks = find_system('{model_name}', 'BlockType', 'ToWorkspace'); "
+            "out_struct = struct(); "
+            "for k = 1:length(ro_blocks); "
+            "  ro = get_param(ro_blocks{k}, 'RuntimeObject'); "
+            "  if ~isempty(ro); "
+            "    try; "
+            "      varname = get_param(ro_blocks{k}, 'VariableName'); "
+            "      out_struct.(varname) = ro.OutputPort(1).Data; "
+            "    catch; end; "
+            "  end; "
+            "end; "
+            "jsonencode(out_struct)",
+            nargout=1
+        )
     except Exception:
         return {}
 
@@ -99,12 +117,6 @@ def _extract_numeric_outputs_from_matlab(matlab_instance):
             num = _coerce_numeric(value)
             if num is not None:
                 numeric[str(key)] = num
-            elif isinstance(value, dict):
-                # Keep one-level nested structures graphable as key.subkey.
-                for sub_key, sub_val in value.items():
-                    sub_num = _coerce_numeric(sub_val)
-                    if sub_num is not None:
-                        numeric[f"{key}.{sub_key}"] = sub_num
     return numeric
 
 
@@ -292,9 +304,10 @@ while True:
                     print(json.dumps(payload), flush=True)
 
     payload = {"time": elapsed, "status": "running", "sim_status": status}
-    workspace_outputs = _extract_numeric_outputs_from_matlab(matlab_instance)
-    if workspace_outputs:
-        payload["workspace_outputs"] = workspace_outputs
+    if status == 'running':
+        live_outputs = _extract_numeric_outputs_from_matlab(matlab_instance, model_name)
+        if live_outputs:
+            payload.update(live_outputs)
 
     print(json.dumps(payload), flush=True)
     if status == 'stopped':
