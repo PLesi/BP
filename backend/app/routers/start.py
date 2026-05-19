@@ -272,25 +272,23 @@ matlab_instance.load_system(model_file)
 try:
     diagnostic = matlab_instance.eval(
         f"blocks = find_system('{model_name}', 'FindAll', 'on', 'FollowLinks', 'on'); "
+        "block_list = {{}}; "
         "for i = 1:length(blocks); "
         "  b = blocks(i); "
         "  try; "
         "    name = get_param(b, 'Name'); "
         "    type = get_param(b, 'BlockType'); "
-        "    if strcmp(type, 'ToWorkspace'); "
-        "      varname = get_param(b, 'VariableName'); "
-        "      fprintf('TO_WORKSPACE: %s -> %s\\n', name, varname); "
-        "    elseif strcmp(type, 'ToFile'); "
-        "      fname = get_param(b, 'Filename'); "
-        "      fprintf('TO_FILE: %s -> %s\\n', name, fname); "
+        "    if strcmp(type, 'ToWorkspace') || strcmp(type, 'ToFile'); "
+        "      block_list{{end+1}} = type; "
         "    end; "
         "  catch; end; "
         "end; "
-        "'done'",
+        "jsonencode(block_list)",
         nargout=1
     )
+    print(json.dumps({"diagnostic": "blocks_found", "types": json.loads(diagnostic) if diagnostic else []}), flush=True)
 except Exception as ex:
-    logger.info(f"Diagnostic query failed: {ex}")
+    print(json.dumps({"diagnostic": "error", "message": str(ex)}), flush=True)
 
 try:
     matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
