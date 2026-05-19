@@ -6,6 +6,7 @@ import time
 import os
 import sys
 import json
+import re
 
 # Custom logging mechanism for this script
 import logging
@@ -105,6 +106,62 @@ def _extract_numeric_outputs_from_matlab(matlab_instance):
                     if sub_num is not None:
                         numeric[f"{key}.{sub_key}"] = sub_num
     return numeric
+
+
+_NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
+
+
+def _extract_numeric_outputs_from_line(line: str, elapsed: float):
+    raw = line.strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            point = {"time": round(elapsed, 6)}
+            has_numeric = False
+            for key, value in parsed.items():
+                if key in {"time", "status", "sim_status", "out_line", "log", "source", "error"}:
+                    continue
+                num = _coerce_numeric(value)
+                if num is not None:
+                    point[str(key)] = num
+                    has_numeric = True
+            return point if has_numeric else None
+    except json.JSONDecodeError:
+        pass
+
+    kv_pairs = {}
+    for token in re.split(r"[;,]\s*", raw):
+        if "=" in token:
+            key, value = token.split("=", 1)
+        elif ":" in token:
+            key, value = token.split(":", 1)
+        else:
+            continue
+
+        key = key.strip()
+        num = _coerce_numeric(value)
+        if key and num is not None:
+            kv_pairs[key] = num
+
+    if kv_pairs:
+        return {"time": round(elapsed, 6), **kv_pairs}
+
+    values = []
+    for match in _NUM_RE.finditer(raw):
+        num = _coerce_numeric(match.group(0))
+        if num is not None:
+            values.append(num)
+
+    if values:
+        point = {"time": round(elapsed, 6)}
+        for index, num in enumerate(values, start=1):
+            point[f"v{index}"] = num
+        return point
+
+    return None
 
 import matlab.engine
 
@@ -227,10 +284,16 @@ while True:
         if chunk:
             for line in chunk.splitlines():
                 if line.strip():
-                    print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
+                    output_point = _extract_numeric_outputs_from_line(line, elapsed)
+                    payload = {"time": elapsed, "status": "running", "out_line": line}
+                    if output_point:
+                        payload["outputs"] = output_point
+                    print(json.dumps(payload), flush=True)
 
     payload = {"time": elapsed, "status": "running", "sim_status": status}
-    payload.update(_extract_numeric_outputs_from_matlab(matlab_instance))
+    workspace_outputs = _extract_numeric_outputs_from_matlab(matlab_instance)
+    if workspace_outputs:
+        payload["workspace_outputs"] = workspace_outputs
 
     print(json.dumps(payload), flush=True)
     if status == 'stopped':
@@ -247,7 +310,11 @@ if args.output and os.path.exists(args.output):
         final_elapsed = round(time.time() - start_ts, 2)
         for line in tail_chunk.splitlines():
             if line.strip():
-                print(json.dumps({"time": final_elapsed, "status": "running", "out_line": line}), flush=True)
+                output_point = _extract_numeric_outputs_from_line(line, final_elapsed)
+                payload = {"time": final_elapsed, "status": "running", "out_line": line}
+                if output_point:
+                    payload["outputs"] = output_point
+                print(json.dumps(payload), flush=True)
 
 logger.info('simulation stopped, closing MATLAB instance...')
 matlab_instance.quit()
