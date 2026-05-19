@@ -75,6 +75,37 @@ def _extract_numeric_outputs(outputs_obj):
             numeric[str(key)] = num
     return numeric
 
+
+def _extract_numeric_outputs_from_matlab(matlab_instance):
+    """Read MATLAB workspace `outputs` and convert it to flat numeric dict."""
+    try:
+        # jsonencode in MATLAB gives us a stable transport format for Python.
+        encoded = matlab_instance.eval("jsonencode(outputs)", nargout=1)
+    except Exception:
+        return {}
+
+    if not encoded:
+        return {}
+
+    try:
+        parsed = json.loads(encoded)
+    except json.JSONDecodeError:
+        return {}
+
+    numeric = {}
+    if isinstance(parsed, dict):
+        for key, value in parsed.items():
+            num = _coerce_numeric(value)
+            if num is not None:
+                numeric[str(key)] = num
+            elif isinstance(value, dict):
+                # Keep one-level nested structures graphable as key.subkey.
+                for sub_key, sub_val in value.items():
+                    sub_num = _coerce_numeric(sub_val)
+                    if sub_num is not None:
+                        numeric[f"{key}.{sub_key}"] = sub_num
+    return numeric
+
 import matlab.engine
 
 logger.info('trying to connect MATLAB shared engine = \'iolabserver_engine\'')
@@ -199,11 +230,7 @@ while True:
                     print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
 
     payload = {"time": elapsed, "status": "running", "sim_status": status}
-    try:
-        payload.update(_extract_numeric_outputs(matlab_instance.workspace['outputs']))
-    except Exception:
-        # Keep heartbeat flowing even if outputs are temporarily unavailable.
-        pass
+    payload.update(_extract_numeric_outputs_from_matlab(matlab_instance))
 
     print(json.dumps(payload), flush=True)
     if status == 'stopped':
