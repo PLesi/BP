@@ -101,6 +101,14 @@ async def validate_experiment(
     # 3. Vytvor dict inputov podľa názvu pre rýchle vyhľadávanie
     required_inputs = {inp.name: inp for inp in device.config.inputs}
 
+    # 3.4 Validuj, že žiadny input name v DB nie je reserved keyword
+    for input_name in required_inputs:
+        if input_name.lower() in RESERVED_KEYWORDS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Device configuration error: Input name '{input_name}' is a reserved keyword and cannot be used. Please remove or rename this input."
+            )
+
     # 3.5 Validuj, že žiadny input name nie je reserved keyword
     for input_name in input_arguments:
         if input_name.lower() in RESERVED_KEYWORDS:
