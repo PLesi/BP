@@ -272,7 +272,6 @@ matlab_instance.load_system(model_file)
 try:
     diagnostic = matlab_instance.eval(
         f"blocks = find_system('{model_name}', 'FindAll', 'on', 'FollowLinks', 'on'); "
-        "block_info = {}; "
         "for i = 1:length(blocks); "
         "  b = blocks(i); "
         "  try; "
@@ -280,11 +279,13 @@ try:
         "    type = get_param(b, 'BlockType'); "
         "    if strcmp(type, 'ToWorkspace'); "
         "      varname = get_param(b, 'VariableName'); "
-        "      fprintf('TO_WORKSPACE: %s writes to variable: %s\\n', name, varname); "
+        "      fprintf('TO_WORKSPACE: %s -> %s\\n', name, varname); "
+        "    elseif strcmp(type, 'ToFile'); "
+        "      fname = get_param(b, 'Filename'); "
+        "      fprintf('TO_FILE: %s -> %s\\n', name, fname); "
         "    end; "
         "  catch; end; "
         "end; "
-        "fprintf('Model blocks loaded.\\n'); "
         "'done'",
         nargout=1
     )
