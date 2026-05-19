@@ -5,6 +5,7 @@ from sqlmodel import select
 
 from ..models import Input, InputCreate, InputPublic, Config, InputLimit
 from ..db import get_session
+from ..services.services import RESERVED_KEYWORDS
 
 router = APIRouter(prefix="/inputs", tags=["inputs"])
 
@@ -32,6 +33,13 @@ async def create_input(
     input: InputCreate,
     session: AsyncSession = Depends(get_session)
 ):
+    # Check if input name is a reserved keyword
+    if input.name.lower() in RESERVED_KEYWORDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Input name '{input.name}' is a reserved keyword and cannot be used"
+        )
+    
     # Check if config exists
     config_stmt = select(Config).where(Config.id == input.config_id)
     config_result = await session.execute(config_stmt)
@@ -78,6 +86,13 @@ async def update_input(
     input_update: InputCreate,
     session: AsyncSession = Depends(get_session)
 ):
+    # Check if input name is a reserved keyword
+    if input_update.name.lower() in RESERVED_KEYWORDS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Input name '{input_update.name}' is a reserved keyword and cannot be used"
+        )
+    
     stmt = select(Input).where(Input.id == id)
     result = await session.execute(stmt)
     db_input = result.scalar_one_or_none()
