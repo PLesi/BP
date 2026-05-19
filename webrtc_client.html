@@ -69,9 +69,25 @@
     <input id="iceUrl" value="stun:stun.l.google.com:19302" />
   </div>
 
+  <div class="row">
+    <label for="wsDeviceName">WS Device Name</label>
+    <input id="wsDeviceName" value="uDAQ28LT" />
+  </div>
+  <div class="row">
+    <label for="wsSoftwareName">WS Software Name</label>
+    <input id="wsSoftwareName" value="MATLAB" />
+  </div>
+  <div class="row">
+    <label for="wsTaskId">WS Task ID</label>
+    <input id="wsTaskId" placeholder="Filled after Run WS Test" />
+  </div>
+
   <button id="btnGrant">1) Generate Grant</button>
   <button id="btnStart">2) Start Stream</button>
   <button id="btnStop">3) Stop Stream</button>
+  <button id="btnWsRun">4) Run WS Test Experiment</button>
+  <button id="btnWsConnect">5) Connect WS by Task ID</button>
+  <button id="btnWsDisconnect">6) Disconnect WS</button>
 
   <video id="video" autoplay playsinline controls></video>
 
@@ -81,8 +97,12 @@
   <h3>Connection stats</h3>
   <pre id="stats">Not connected.</pre>
 
+  <h3>WebSocket log</h3>
+  <pre id="wsLog">Disconnected.</pre>
+
   <script>
     let pc = null;
+    let ws = null;
     let statsTimer = null;
     let prevInboundBytes = null;
     let prevInboundTs = null;
@@ -93,12 +113,19 @@
       apiKey: document.getElementById('apiKey'),
       grantToken: document.getElementById('grantToken'),
       iceUrl: document.getElementById('iceUrl'),
+      wsDeviceName: document.getElementById('wsDeviceName'),
+      wsSoftwareName: document.getElementById('wsSoftwareName'),
+      wsTaskId: document.getElementById('wsTaskId'),
       video: document.getElementById('video'),
       log: document.getElementById('log'),
       stats: document.getElementById('stats'),
+      wsLog: document.getElementById('wsLog'),
       btnGrant: document.getElementById('btnGrant'),
       btnStart: document.getElementById('btnStart'),
-      btnStop: document.getElementById('btnStop')
+      btnStop: document.getElementById('btnStop'),
+      btnWsRun: document.getElementById('btnWsRun'),
+      btnWsConnect: document.getElementById('btnWsConnect'),
+      btnWsDisconnect: document.getElementById('btnWsDisconnect')
     };
 
     function resetStats() {
@@ -189,14 +216,117 @@
       console.log(line);
     }
 
+    function wsLog(msg) {
+      const line = `[${new Date().toLocaleTimeString()}] ${msg}`;
+      el.wsLog.textContent += line + '\n';
+      el.wsLog.scrollTop = el.wsLog.scrollHeight;
+      console.log(line);
+    }
+
     function endpoints() {
       const base = el.baseUrl.value.replace(/\/$/, '');
       const device = encodeURIComponent(el.deviceName.value.trim());
       return {
         grants: `${base}/api/server/devices/${device}/webrtc/grants`,
         offer: `${base}/api/server/devices/${device}/webrtc/offer`,
-        stop: `${base}/api/server/devices/${device}/webrtc/stop`
+        stop: `${base}/api/server/devices/${device}/webrtc/stop`,
+        runExperiment: `${base}/experiments/run`
       };
+    }
+
+    function wsBaseUrl() {
+      const base = el.baseUrl.value.replace(/\/$/, '');
+      return base
+        .replace(/^http:\/\//i, 'ws://')
+        .replace(/^https:\/\//i, 'wss://');
+    }
+
+    function makeWsExperimentPayload() {
+      return {
+        command: 'start',
+        device_name: el.wsDeviceName.value.trim(),
+        software_name: el.wsSoftwareName.value.trim(),
+        simulation_time: 60,
+        sample_rate: 10,
+        setpoint_changes: {
+          start_value: 0,
+          steps: []
+        },
+        input_arguments: {
+          bulb: { value: 100, type: 'number', unit: '%', order: 1 },
+          fan: { value: 0, type: 'number', unit: '%', order: 2 },
+          led: { value: 100, type: 'number', unit: '%', order: 3 },
+          reg_output: { value: 'light_intensity', type: 'string', unit: '-', order: 4 },
+          reg_signal: { value: 'bulb', type: 'string', unit: '-', order: 5 },
+          reg_target: { value: 35, type: 'number', unit: 'lx', order: 6 },
+          Kc: { value: 2, type: 'number', unit: '-', order: 7 },
+          Ti: { value: 1, type: 'number', unit: 's', order: 8 },
+          U_min: { value: 0, type: 'number', unit: 'V', order: 9 },
+          U_max: { value: 5, type: 'number', unit: 'V', order: 10 }
+        },
+        output_arguments: ['light_intensity']
+      };
+    }
+
+    function disconnectWs() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    function connectWsByTaskId(taskId) {
+      if (!taskId) {
+        throw new Error('Task ID is required to connect WebSocket.');
+      }
+
+      disconnectWs();
+      const url = `${wsBaseUrl()}/experiments/ws/${encodeURIComponent(taskId)}`;
+      wsLog(`Connecting to ${url} ...`);
+
+      ws = new WebSocket(url);
+      ws.onopen = () => wsLog('WebSocket connected.');
+      ws.onclose = () => wsLog('WebSocket disconnected.');
+      ws.onerror = () => wsLog('WebSocket error.');
+      ws.onmessage = (ev) => {
+        wsLog(`Message: ${ev.data}`);
+      };
+    }
+
+    async function runWsTestExperiment() {
+      const { runExperiment } = endpoints();
+      const payload = makeWsExperimentPayload();
+
+      if (!payload.device_name) {
+        throw new Error('WS Device Name is required.');
+      }
+      if (!payload.software_name) {
+        throw new Error('WS Software Name is required.');
+      }
+
+      wsLog('Queueing test experiment...');
+      const res = await fetch(runExperiment, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(`Run experiment failed: ${res.status} ${JSON.stringify(body)}`);
+      }
+
+      const taskId = body.task_id;
+      if (!taskId) {
+        throw new Error('Backend did not return task_id.');
+      }
+
+      el.wsTaskId.value = taskId;
+      wsLog(`Experiment queued with task_id=${taskId}`);
+      connectWsByTaskId(taskId);
     }
 
     async function generateGrant() {
@@ -337,6 +467,26 @@
         log(e.message);
         alert(e.message);
       });
+    });
+
+    el.btnWsRun.addEventListener('click', () => {
+      runWsTestExperiment().catch((e) => {
+        wsLog(e.message);
+        alert(e.message);
+      });
+    });
+
+    el.btnWsConnect.addEventListener('click', () => {
+      try {
+        connectWsByTaskId(el.wsTaskId.value.trim());
+      } catch (e) {
+        wsLog(e.message);
+        alert(e.message);
+      }
+    });
+
+    el.btnWsDisconnect.addEventListener('click', () => {
+      disconnectWs();
     });
   </script>
 </body>

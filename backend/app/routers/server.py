@@ -128,11 +128,9 @@ async def get_server_devices(
     devices_payload = []
 
     for device in db_devices:
-        # Device without config cannot be usable
         if not device.config or not device.config.port:
             continue
 
-        # Build model name for Simulink check
         if not device.slx_model:
             _log.info(
                 "[get_server_devices] device=%r online=%s usable=%s reason=%r",

@@ -5,6 +5,7 @@
 import time
 import os
 import sys
+import json
 
 # Custom logging mechanism for this script
 import logging
@@ -44,7 +45,7 @@ for keyval_pair in args.input.split(','):
 import matlab.engine
 
 logger.info('trying to connect MATLAB shared engine = \'iolabserver_engine\'')
-matlab_instance = matlab.engine.connect_matlab('iolabserver_engine')  # Try directly connect MATLAB
+matlab_instance = matlab.engine.connect_matlab('iolabserver_engine')  
 i = 0
 if matlab_instance is None:
     logger.info('\'iolabserver_engine\' shared engine not found...')
@@ -141,10 +142,45 @@ except Exception as ex:
     logger.exception('ERROR: exception while starting simulation.')
     matlab_instance.quit()
     raise
-    
-# logger.info('simulation is running, hold on...')
-while matlab_instance.get_param(model_name, 'SimulationStatus') != 'stopped':
-    pass
+
+# Emit heartbeat messages so WS clients receive real-time progress.
+start_ts = time.time()
+last_out_pos = 0
+if args.output and os.path.exists(args.output):
+    # Start from EOF so WS gets only new lines from this run.
+    last_out_pos = os.path.getsize(args.output)
+
+while True:
+    status = matlab_instance.get_param(model_name, 'SimulationStatus')
+    elapsed = round(time.time() - start_ts, 2)
+
+    if args.output and os.path.exists(args.output):
+        with open(args.output, 'r', encoding='utf-8', errors='replace') as out_file:
+            out_file.seek(last_out_pos)
+            chunk = out_file.read()
+            last_out_pos = out_file.tell()
+
+        if chunk:
+            for line in chunk.splitlines():
+                if line.strip():
+                    print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
+
+    print(json.dumps({"time": elapsed, "status": "running", "sim_status": status}), flush=True)
+    if status == 'stopped':
+        break
+    time.sleep(1.0)
+
+# Flush final out.txt lines written right before simulation stop.
+if args.output and os.path.exists(args.output):
+    with open(args.output, 'r', encoding='utf-8', errors='replace') as out_file:
+        out_file.seek(last_out_pos)
+        tail_chunk = out_file.read()
+
+    if tail_chunk:
+        final_elapsed = round(time.time() - start_ts, 2)
+        for line in tail_chunk.splitlines():
+            if line.strip():
+                print(json.dumps({"time": final_elapsed, "status": "running", "out_line": line}), flush=True)
 
 logger.info('simulation stopped, closing MATLAB instance...')
 matlab_instance.quit()
