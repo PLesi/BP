@@ -287,7 +287,8 @@ while True:
                     output_point = _extract_numeric_outputs_from_line(line, elapsed)
                     payload = {"time": elapsed, "status": "running", "out_line": line}
                     if output_point:
-                        payload["outputs"] = output_point
+                        # Merge numeric fields to top level so downstream chart parser can see them.
+                        payload.update({k: v for k, v in output_point.items() if k != "time"})
                     print(json.dumps(payload), flush=True)
 
     payload = {"time": elapsed, "status": "running", "sim_status": status}
@@ -313,7 +314,7 @@ if args.output and os.path.exists(args.output):
                 output_point = _extract_numeric_outputs_from_line(line, final_elapsed)
                 payload = {"time": final_elapsed, "status": "running", "out_line": line}
                 if output_point:
-                    payload["outputs"] = output_point
+                    payload.update({k: v for k, v in output_point.items() if k != "time"})
                 print(json.dumps(payload), flush=True)
 
 logger.info('simulation stopped, closing MATLAB instance...')

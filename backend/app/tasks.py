@@ -11,6 +11,9 @@ from .websocket_manager import ws_manager
 from .services.services import calculate_estimated_wait_time
 
 
+LOCK_TTL_SECONDS = 6 * 60 * 60
+
+
 _NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
 
 
@@ -92,9 +95,19 @@ def _chart_point_from_line(line: str, elapsed: float) -> dict | None:
 
     return None
 
-def acquire_lock(device_id: int) -> bool:
+def acquire_lock(device_id: int, task_id: str | None = None) -> bool:
     lock_key = f"device_lock:{device_id}"
-    result = redis_client.set(lock_key, "locked", nx=True)
+    lock_payload = {
+        "task_id": task_id,
+        "acquired_at": datetime.now(UTC).isoformat(),
+        "pid": os.getpid(),
+    }
+    result = redis_client.set(
+        lock_key,
+        json.dumps(lock_payload),
+        nx=True,
+        ex=LOCK_TTL_SECONDS,
+    )
     print(f"Acquiring lock for device {device_id}: {result}")
     return result
 
@@ -121,18 +134,20 @@ def device_worker(device_id: int):
         print(f"Queue empty for device {device_id}")
         return
 
-    if not acquire_lock(device_id): 
-        print(f"Device {device_id} is locked, returning task to queue")
-        redis_client.rpush(f"device_queue:{device_id}", queued_task)
-        return
-
+    acquired = False
     try:
         experiment = json.loads(queued_task)
         print(f"Running experiment: {experiment.get('task_id')}")
+        acquired = acquire_lock(device_id, experiment.get("task_id"))
+        if not acquired:
+            print(f"Device {device_id} is locked, returning task to queue")
+            redis_client.rpush(f"device_queue:{device_id}", queued_task)
+            return
         asyncio.run(run_experiment(experiment))
         
     finally:
-        release_lock(device_id)
+        if acquired:
+            release_lock(device_id)
 
 
 async def run_experiment(experiment: dict):

@@ -38,6 +38,42 @@ def verify_ws_api_key(websocket: WebSocket):
     return provided == expected_key
 
 
+def _reclaim_stale_device_lock(device_id: int) -> bool:
+    lock_key = f"device_lock:{device_id}"
+    raw = redis_client.get(lock_key)
+    if not raw:
+        return False
+
+    try:
+        lock_data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Old-format lock from before metadata was added.
+        redis_client.delete(lock_key)
+        return True
+
+    if not isinstance(lock_data, dict):
+        redis_client.delete(lock_key)
+        return True
+
+    acquired_at = lock_data.get("acquired_at")
+    if not acquired_at:
+        redis_client.delete(lock_key)
+        return True
+
+    try:
+        acquired_dt = datetime.fromisoformat(acquired_at)
+    except ValueError:
+        redis_client.delete(lock_key)
+        return True
+
+    age_seconds = (datetime.now(UTC) - acquired_dt).total_seconds()
+    if age_seconds > 6 * 60 * 60:
+        redis_client.delete(lock_key)
+        return True
+
+    return False
+
+
 async def enqueue_server_experiment(
     experiment: ExperimentReq,
     session: AsyncSession,
@@ -57,12 +93,13 @@ async def enqueue_server_experiment(
             detail=f"Software '{experiment.software_name}' not found on device '{experiment.device_name}'"
         )
 
-    # Check device is not already locked (busy)
+    # Reclaim obviously stale locks left behind by interrupted runs.
     if redis_client.exists(f"device_lock:{device.id}"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Device is currently busy with another experiment"
-        )
+        if not _reclaim_stale_device_lock(device.id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Device is currently busy with another experiment"
+            )
 
     job_id = str(uuid.uuid4())
     queue_item = {
