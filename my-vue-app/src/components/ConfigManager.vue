@@ -386,7 +386,13 @@ onMounted(fetchAll)
               </div>
               <div class="space-y-1">
                 <Label class="text-zinc-500 text-xs">Type</Label>
-                <Input v-model="newOutput.type" placeholder="e.g. float" class="bg-zinc-900 border-zinc-700 text-white text-sm placeholder:text-zinc-600 h-8" />
+                <select v-model="newOutput.type" class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-8">
+                  <option value="" disabled>Select type</option>
+                  <option value="float">float</option>
+                  <option value="int">int</option>
+                  <option value="bool">bool</option>
+                  <option value="string">string</option>
+                </select>
               </div>
             </div>
             <p v-if="outputError" class="text-xs text-red-400">{{ outputError }}</p>

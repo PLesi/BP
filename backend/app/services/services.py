@@ -139,19 +139,25 @@ async def validate_experiment(
     for input_name, arg in input_arguments.items():
         input_def = required_inputs[input_name]
         value = arg.value
+        req_type = arg.type  # "number" | "string" | "boolean" — validated by Pydantic
 
-        db_type = input_def.type
-        if db_type in ("float", "int", "number"):
+        if req_type == "number":
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Input '{input_name}' must be numeric, got {type(value).__name__}"
                 )
-        elif db_type in ("bool", "boolean"):
+        elif req_type == "boolean":
             if not isinstance(value, bool):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Input '{input_name}' must be boolean, got {type(value).__name__}"
+                )
+        elif req_type == "string":
+            if not isinstance(value, str):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Input '{input_name}' must be a string, got {type(value).__name__}"
                 )
 
         if input_def.input_limit and isinstance(value, (int, float)):
