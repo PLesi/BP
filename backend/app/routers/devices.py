@@ -38,9 +38,7 @@ async def create_device(
     device: DeviceCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    clean_device_type = None
-    if device.device_type:
-        clean_device_type = device.device_type.strip() or None
+    clean_device_type = device.device_type.strip() or None if device.device_type else None
     clean_slx_model = device.slx_model.strip()
 
     db_device = Device(
@@ -109,9 +107,7 @@ async def delete_device(
             detail="Device not found"
         )
 
-    if db_device.config:
-        config = db_device.config
-
+    if config := db_device.config:
         for inp in config.inputs:
             if inp.input_limit:
                 await session.delete(inp.input_limit)

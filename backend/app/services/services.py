@@ -14,16 +14,12 @@ from ..redis_client import redis_client
 
 # Reserved keywords that cannot be used as input parameter names
 RESERVED_KEYWORDS = {
-    # Python keywords
     'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def',
     'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if',
     'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise',
     'return', 'try', 'while', 'with', 'yield',
-    # MATLAB keywords
-    'break', 'case', 'catch', 'classdef', 'continue', 'else', 'elseif', 'end',
-    'for', 'function', 'global', 'if', 'otherwise', 'persistent', 'return',
-    'switch', 'try', 'while',
-    # Common programming keywords
+    'case', 'catch', 'classdef', 'elseif', 'end', 'function', 'otherwise',
+    'persistent', 'switch',
     'true', 'false', 'null', 'none', 'var', 'let', 'const', 'void', 'public',
     'private', 'protected', 'static', 'final', 'abstract', 'interface', 'enum',
 }
@@ -32,15 +28,9 @@ RESERVED_KEYWORDS = {
 def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
     expected_key = os.getenv("API_KEY")
     if not expected_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server API key is not found",
-        )
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Server API key is not found")
     if x_api_key != expected_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Unauthorized",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
 async def validate_experiment(

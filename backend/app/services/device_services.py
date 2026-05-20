@@ -1,6 +1,3 @@
-from importlib import import_module
-from pathlib import Path
-from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
@@ -31,14 +28,12 @@ def check_device_online(port: str, slx_model: str) -> dict:
     try:
         import matlab.engine
     except ImportError:
-        reason = "MATLAB engine not installed"
-        _log.warning("[check_device_online] FAIL – %s", reason)
-        return {"online": False, "usable": False, "reason": reason}
+        _log.warning("[check_device_online] FAIL – MATLAB engine not installed")
+        return {"online": False, "usable": False, "reason": "MATLAB engine not installed"}
 
     if not os.path.exists(port):
-        reason = f"Port {port} not found"
-        _log.warning("[check_device_online] FAIL – %s", reason)
-        return {"online": False, "usable": False, "reason": reason}
+        _log.warning("[check_device_online] FAIL – port %r not found", port)
+        return {"online": False, "usable": False, "reason": f"Port {port} not found"}
 
     _log.debug("[check_device_online] port %r exists", port)
 
@@ -52,9 +47,8 @@ def check_device_online(port: str, slx_model: str) -> dict:
     _log.debug("[check_device_online] MATLAB engines found: %r", engines)
 
     if not engines:
-        reason = "No running MATLAB engine found"
-        _log.warning("[check_device_online] FAIL – %s", reason)
-        return {"online": False, "usable": False, "reason": reason}
+        _log.warning("[check_device_online] FAIL – no running MATLAB engine")
+        return {"online": False, "usable": False, "reason": "No running MATLAB engine found"}
 
     try:
         matlab_instance = matlab.engine.connect_matlab(engines[0])
@@ -68,9 +62,8 @@ def check_device_online(port: str, slx_model: str) -> dict:
         return {"online": True, "usable": False, "reason": reason}
 
     if status == "running":
-        reason = "Device busy - simulation already running"
-        _log.warning("[check_device_online] FAIL – %s", reason)
-        return {"online": True, "usable": False, "reason": reason}
+        _log.warning("[check_device_online] FAIL – simulation already running")
+        return {"online": True, "usable": False, "reason": "Device busy - simulation already running"}
 
     _log.debug("[check_device_online] OK – device ready")
     return {"online": True, "usable": True, "reason": "Device ready"}

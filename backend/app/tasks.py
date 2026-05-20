@@ -30,29 +30,25 @@ def _to_float(value):
             return float(s)
     except (TypeError, ValueError):
         return None
-    return None
 
 
-def _chart_point_from_dict(data: dict) -> dict | None:
-    time_val = _to_float(data.get("time"))
-    if time_val is None:
+def _make_point(data: dict) -> dict | None:
+    t = _to_float(data.get("time"))
+    if t is None:
         return None
 
-    point = {"time": round(time_val, 6)}
-    has_numeric = False
+    skip = {"time", "status", "sim_status", "out_line", "log", "source", "error"}
+    point = {"time": round(t, 6)}
+    for k, v in data.items():
+        if k not in skip:
+            n = _to_float(v)
+            if n is not None:
+                point[k] = n
 
-    for key, value in data.items():
-        if key in {"time", "status", "sim_status", "out_line", "log", "source", "error"}:
-            continue
-        num = _to_float(value)
-        if num is not None:
-            point[key] = num
-            has_numeric = True
-
-    return point if has_numeric else None
+    return point if len(point) > 1 else None
 
 
-def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None = None) -> dict | None:
+def _parse_point(line: str, elapsed: float, columns: list[str] | None = None) -> dict | None:
     raw = line.strip()
     if not raw:
         return None
@@ -61,12 +57,12 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
     try:
         parsed = json.loads(raw)
         if isinstance(parsed, dict):
-            return _chart_point_from_dict(parsed)
+            return _make_point(parsed)
     except json.JSONDecodeError:
         pass
 
     # key=value or key:value pairs
-    pairs = {}
+    kv: dict = {}
     for token in re.split(r"[;,]\s*", raw):
         if "=" in token:
             k, v = token.split("=", 1)
@@ -74,15 +70,12 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
             k, v = token.split(":", 1)
         else:
             continue
-        key = k.strip()
-        if not key:
-            continue
-        num = _to_float(v)
-        if num is not None:
-            pairs[key] = num
+        k = k.strip()
+        if k and (n := _to_float(v)) is not None:
+            kv[k] = n
 
-    if pairs:
-        return {"time": round(elapsed, 6), **pairs}
+    if kv:
+        return {"time": round(elapsed, 6), **kv}
 
     # fallback: CSV numbers mapped to column headers or v1..vN
     numbers = [_to_float(m.group(0)) for m in _NUM_RE.finditer(raw)]
@@ -106,20 +99,14 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
     return None
 
 def acquire_lock(device_id: int, task_id: str | None = None) -> bool:
-    lock_key = f"device_lock:{device_id}"
-    lock_payload = {
-        "task_id": task_id,
-        "acquired_at": datetime.now(UTC).isoformat(),
-        "pid": os.getpid(),
-    }
-    result = redis_client.set(
-        lock_key,
-        json.dumps(lock_payload),
+    ok = redis_client.set(
+        f"device_lock:{device_id}",
+        json.dumps({"task_id": task_id, "acquired_at": datetime.now(UTC).isoformat(), "pid": os.getpid()}),
         nx=True,
         ex=LOCK_TTL_SECONDS,
     )
-    print(f"Acquiring lock for device {device_id}: {result}")
-    return result
+    print(f"Acquiring lock for device {device_id}: {ok}")
+    return ok
 
 def release_lock(device_id: int):
     lock_key = f"device_lock:{device_id}"
@@ -230,7 +217,7 @@ async def run_experiment(experiment: dict):
             "device_id": device_id,
             "data": data
         })
-        chart_point = _chart_point_from_dict(data) if isinstance(data, dict) else None
+        chart_point = _make_point(data) if isinstance(data, dict) else None
         if chart_point:
             await ws_manager.send_message(task_id, {
                 "status": "chart_point",
@@ -262,7 +249,7 @@ async def run_experiment(experiment: dict):
                 # raw out_line — extract chart point from text using headers if available
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
-                    chart_point = _chart_point_from_line(data["out_line"], elapsed, out_columns)
+                    chart_point = _parse_point(data["out_line"], elapsed, out_columns)
                     await ws_manager.send_message(task_id, {
                         "status": "running",
                         "device_id": device_id,
@@ -279,7 +266,7 @@ async def run_experiment(experiment: dict):
                     await send_running_with_chart(data)
             except json.JSONDecodeError:
                 elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
-                chart_point = _chart_point_from_line(output, elapsed, out_columns)
+                chart_point = _parse_point(output, elapsed, out_columns)
                 await ws_manager.send_message(task_id, {
                     "status": "running",
                     "device_id": device_id,
@@ -333,7 +320,7 @@ async def run_experiment(experiment: dict):
                         }
                         output_history.append(payload)
                         await send_running_with_chart(payload)
-                        chart_point = _chart_point_from_line(line, elapsed, out_columns)
+                        chart_point = _parse_point(line, elapsed, out_columns)
                         if chart_point:
                             output_history.append(chart_point)
                             await ws_manager.send_message(task_id, {

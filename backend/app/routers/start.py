@@ -33,25 +33,24 @@ parser.add_argument('--slx-model', type=str, default='PI_RED.slx', help='Simulin
 
 args = parser.parse_args()
 
-# Parse validated input arguments from JSON; extract plain value for each key.
-_raw_inputs = json.loads(args.input_json)
-inputs = {k: v['value'] for k, v in _raw_inputs.items()}
+# Parse input args — extract plain values from the validated JSON
+inputs = {k: v['value'] for k, v in json.loads(args.input_json).items()}
 
 
-def _coerce_numeric(value):
+def _to_num(value):
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
         return float(value)
 
-# matlab.double / list-like containers often come as one-element arrays
+    # matlab.double / list-like containers often come as one-element arrays
     if isinstance(value, (list, tuple)):
         if not value:
             return None
         first = value[0]
         if isinstance(first, (list, tuple)) and first:
             first = first[0]
-        return _coerce_numeric(first)
+        return _to_num(first)
 
     try:
         return float(value)
@@ -59,23 +58,21 @@ def _coerce_numeric(value):
         return None
 
 
-def _extract_numeric_outputs(outputs_obj):
-    numeric = {}
+def _parse_outputs(outputs_obj):
     if not isinstance(outputs_obj, dict):
-        return numeric
-
+        return {}
+    numeric = {}
     for key, value in outputs_obj.items():
-        num = _coerce_numeric(value)
+        num = _to_num(value)
         if num is not None:
             numeric[str(key)] = num
     return numeric
 
 
-def _extract_numeric_outputs_from_matlab(matlab_instance, model_name):
-    """Read latest output values directly from MATLAB workspace."""
+def _read_outputs(matlab_instance, model_name):
     try:
         outputs_obj = matlab_instance.workspace['outputs']
-        return _extract_numeric_outputs(outputs_obj)
+        return _parse_outputs(outputs_obj)
     except Exception:
         return {}
 
@@ -83,7 +80,7 @@ def _extract_numeric_outputs_from_matlab(matlab_instance, model_name):
 _NUM_RE = re.compile(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?")
 
 
-def _extract_numeric_outputs_from_line(line: str, elapsed: float):
+def _line_to_point(line: str, elapsed: float):
     raw = line.strip()
     if not raw:
         return None
@@ -96,7 +93,7 @@ def _extract_numeric_outputs_from_line(line: str, elapsed: float):
             for key, value in parsed.items():
                 if key in {"time", "status", "sim_status", "out_line", "log", "source", "error"}:
                     continue
-                num = _coerce_numeric(value)
+                num = _to_num(value)
                 if num is not None:
                     point[str(key)] = num
                     has_numeric = True
@@ -114,7 +111,7 @@ def _extract_numeric_outputs_from_line(line: str, elapsed: float):
             continue
 
         key = key.strip()
-        num = _coerce_numeric(value)
+        num = _to_num(value)
         if key and num is not None:
             kv_pairs[key] = num
 
@@ -123,7 +120,7 @@ def _extract_numeric_outputs_from_line(line: str, elapsed: float):
 
     values = []
     for match in _NUM_RE.finditer(raw):
-        num = _coerce_numeric(match.group(0))
+        num = _to_num(match.group(0))
         if num is not None:
             values.append(num)
 

@@ -38,7 +38,7 @@ def verify_ws_api_key(websocket: WebSocket):
     return provided == expected_key
 
 
-def _reclaim_stale_device_lock(device_id: int) -> bool:
+def _clear_stale_lock(device_id: int) -> bool:
     lock_key = f"device_lock:{device_id}"
     raw = redis_client.get(lock_key)
     if not raw:
@@ -93,7 +93,7 @@ async def enqueue_server_experiment(
         )
 
     if redis_client.exists(f"device_lock:{device.id}"):
-        if not _reclaim_stale_device_lock(device.id):
+        if not _clear_stale_lock(device.id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Device is currently busy with another experiment"
