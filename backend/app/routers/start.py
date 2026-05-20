@@ -183,24 +183,30 @@ matlab_instance.workspace['simparams'] = {
     'duration': float(0)                    # Sampled duration — written back by simulation
 }
 
-# device inputs — anything that's not a reg param
-_reg_keys = {'reg_output', 'reg_signal', 'reg_target', 'Kc', 'Ti', 'U_min', 'U_max'}
-matlab_instance.workspace['inputs'] = {
-    k: float(v) for k, v in inputs.items() if k not in _reg_keys
+# string → MATLAB numeric code maps (hardware-specific constants for uDAQ28LT)
+_str_to_num = {
+    'temperature': 1.0, 'light_intensity': 2.0, 'fan_rpm': 3.0,
+    'bulb': 1.0, 'fan': 2.0, 'led': 3.0,
 }
 
-# string names to MATLAB numeric codes
-_reg_output_map = {'temperature': 1.0, 'light_intensity': 2.0, 'fan_rpm': 3.0}
-_reg_signal_map = {'bulb': 1.0, 'fan': 2.0, 'led': 3.0}
-reg_output = {'reg_output': _reg_output_map[inputs['reg_output']]} if inputs.get('reg_output') in _reg_output_map else {}
-reg_signal = {'reg_signal': _reg_signal_map[inputs['reg_signal']]} if inputs.get('reg_signal') in _reg_signal_map else {}
+_input_meta = json.loads(args.input_json)
+_ws_inputs = {}
+_ws_regparams = {}
 
-_scalar_reg_keys = ['reg_target', 'Kc', 'Ti', 'U_min', 'U_max']
-regparams = {**reg_signal, **reg_output}
-for _k in _scalar_reg_keys:
-    if _k in inputs:
-        regparams[_k] = float(inputs[_k])
-matlab_instance.workspace['regparams'] = regparams
+for _k, _meta in _input_meta.items():
+    _value = _meta['value']
+    _target = _meta.get('workspace', 'inputs')
+    if _target == 'regparams':
+        if isinstance(_value, str):
+            _ws_regparams[_k] = _str_to_num.get(_value, 0.0)
+        else:
+            _ws_regparams[_k] = float(_value)
+    else:
+        if not isinstance(_value, bool):
+            _ws_inputs[_k] = float(_value)
+
+matlab_instance.workspace['inputs'] = _ws_inputs
+matlab_instance.workspace['regparams'] = _ws_regparams
 
 logger.info('MATLAB workspace variables set...')
 logger.info('trying to run Simuling simulation on uDAQ28LT_system...')

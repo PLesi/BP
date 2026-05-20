@@ -8,7 +8,7 @@ interface Software { id: number; name: string }
 interface Device { id: number; name: string }
 interface TimeLimit { id: number; period: number; frequency: number }
 interface InputLimit { id: number; min: number; max: number }
-interface ConfigInput { id: number; type: string; name: string; input_limit: InputLimit | null }
+interface ConfigInput { id: number; type: string; name: string; workspace: string; input_limit: InputLimit | null }
 interface ConfigOutput { id: number; type: string; name: string }
 interface Config {
   id: number
@@ -44,7 +44,7 @@ const form = ref({
 })
 
 // New input/output form
-const newInput = ref({ type: '', name: '', has_limit: false, min: '', max: '' })
+const newInput = ref({ type: '', name: '', workspace: 'inputs', has_limit: false, min: '', max: '' })
 const newOutput = ref({ type: '', name: '' })
 const inputError = ref<string | null>(null)
 const outputError = ref<string | null>(null)
@@ -81,7 +81,7 @@ function selectConfig(cfg: Config) {
     tl_period: cfg.time_limit?.period ?? '',
     tl_frequency: cfg.time_limit?.frequency ?? '',
   }
-  newInput.value = { type: '', name: '', has_limit: false, min: '', max: '' }
+  newInput.value = { type: '', name: '', workspace: 'inputs', has_limit: false, min: '', max: '' }
   newOutput.value = { type: '', name: '' }
 }
 
@@ -135,8 +135,7 @@ async function addInput() {
   const payload: any = {
     config_id: selected.value!.id,
     type: newInput.value.type.trim(),
-    name: newInput.value.name.trim(),
-    input_limit: newInput.value.has_limit
+    name: newInput.value.name.trim(),    workspace: newInput.value.workspace,    input_limit: newInput.value.has_limit
       ? { min: Number(newInput.value.min), max: Number(newInput.value.max) }
       : null,
   }
@@ -145,7 +144,7 @@ async function addInput() {
   await fetchAll()
   const fresh = configs.value.find(c => c.id === selected.value!.id)
   if (fresh) selectConfig(fresh)
-  newInput.value = { type: '', name: '', has_limit: false, min: '', max: '' }
+  newInput.value = { type: '', name: '', workspace: 'inputs', has_limit: false, min: '', max: '' }
 }
 
 async function deleteInput(id: number) {
@@ -290,6 +289,7 @@ onMounted(fetchAll)
               <tr class="text-left text-zinc-500 text-xs uppercase">
                 <th class="pb-2 pr-4">Name</th>
                 <th class="pb-2 pr-4">Type</th>
+                <th class="pb-2 pr-4">Workspace</th>
                 <th class="pb-2 pr-4">Min</th>
                 <th class="pb-2 pr-4">Max</th>
                 <th class="pb-2"></th>
@@ -299,6 +299,7 @@ onMounted(fetchAll)
               <tr v-for="inp in selected.inputs" :key="inp.id" class="border-t border-zinc-800">
                 <td class="py-1.5 pr-4">{{ inp.name }}</td>
                 <td class="py-1.5 pr-4 text-zinc-500">{{ inp.type }}</td>
+                <td class="py-1.5 pr-4 text-zinc-500">{{ inp.workspace }}</td>
                 <td class="py-1.5 pr-4 text-zinc-500">{{ inp.input_limit?.min ?? '—' }}</td>
                 <td class="py-1.5 pr-4 text-zinc-500">{{ inp.input_limit?.max ?? '—' }}</td>
                 <td class="py-1.5">
@@ -318,7 +319,20 @@ onMounted(fetchAll)
               </div>
               <div class="space-y-1">
                 <Label class="text-zinc-500 text-xs">Type</Label>
-                <Input v-model="newInput.type" placeholder="e.g. float" class="bg-zinc-900 border-zinc-700 text-white text-sm placeholder:text-zinc-600 h-8" />
+                <select v-model="newInput.type" class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-8">
+                  <option value="" disabled>Select type</option>
+                  <option value="float">float</option>
+                  <option value="int">int</option>
+                  <option value="bool">bool</option>
+                  <option value="string">string</option>
+                </select>
+              </div>
+              <div class="space-y-1">
+                <Label class="text-zinc-500 text-xs">Workspace</Label>
+                <select v-model="newInput.workspace" class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-8">
+                  <option value="inputs">inputs</option>
+                  <option value="regparams">regparams</option>
+                </select>
               </div>
             </div>
             <div class="flex items-center gap-2">

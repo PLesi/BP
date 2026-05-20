@@ -6,6 +6,7 @@ from fastapi import Header, HTTPException, status
 import json
 import os
 import time
+from datetime import datetime, timedelta
 
 
 from ..models import Device, Config, Input, ExperimentInputArgument
@@ -63,6 +64,34 @@ async def validate_experiment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device has no configuration"
         )
+
+    if device.maintenance_start and device.maintenance_end:
+        now = datetime.now()
+        exp_end = now + timedelta(seconds=simulation_time)
+        maint_start_dt = now.replace(
+            hour=device.maintenance_start.hour,
+            minute=device.maintenance_start.minute,
+            second=device.maintenance_start.second,
+            microsecond=0,
+        )
+        maint_end_dt = now.replace(
+            hour=device.maintenance_end.hour,
+            minute=device.maintenance_end.minute,
+            second=device.maintenance_end.second,
+            microsecond=0,
+        )
+        # Handle overnight window (e.g. 23:00 – 01:00)
+        if maint_end_dt <= maint_start_dt:
+            maint_end_dt += timedelta(days=1)
+        if now < maint_end_dt and maint_start_dt < exp_end:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    f"Device '{device_name}' is in maintenance window "
+                    f"({device.maintenance_start} – {device.maintenance_end}). "
+                    "Experiment not allowed during this time."
+                ),
+            )
 
     if device.config.time_limit:
         if simulation_time > device.config.time_limit.period:
@@ -136,6 +165,10 @@ async def validate_experiment(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Input '{input_name}' value {value} exceeds maximum {input_def.input_limit.max}"
                 )
+
+    # Inject workspace from DB into each argument so start.py can route correctly
+    for input_name, arg in input_arguments.items():
+        arg.workspace = required_inputs[input_name].workspace
 
     return device
 

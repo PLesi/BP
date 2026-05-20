@@ -44,6 +44,7 @@ class Input(SQLModel, table=True):
     config_id: int = Field(foreign_key="configs.id")
     type: str
     name: str
+    workspace: str = Field(default="inputs")  # "inputs" or "regparams"
     input_limit_id: int | None = Field(default=None, foreign_key="input_limits.id")
     
     # Relationships
@@ -87,6 +88,7 @@ class InputPublic(BaseModel):
     id: int
     type: str
     name: str
+    workspace: str = "inputs"
     input_limit: InputLimitPublic | None = None
 
 class OutputPublic(BaseModel):
@@ -255,6 +257,7 @@ class InputCreate(BaseModel):
     config_id: int
     type: str
     name: str
+    workspace: str = "inputs"  # "inputs" or "regparams"
     input_limit: InputLimitCreate | None = None
 
 class OutputCreate(BaseModel):
@@ -280,6 +283,7 @@ class ExperimentInputArgument(BaseModel):
     type: Literal["number", "string", "boolean"]
     unit: str                       # required per spec
     order: int
+    workspace: str = "inputs"       # "inputs" or "regparams"
 
 
 class ExperimentReq(BaseModel):

@@ -62,6 +62,7 @@ async def create_input(
         config_id=input.config_id,
         type=input.type,
         name=input.name,
+        workspace=input.workspace,
         input_limit_id=input_limit_id
     )
     
@@ -119,6 +120,7 @@ async def update_input(
     
     db_input.type = input_update.type
     db_input.name = input_update.name
+    db_input.workspace = input_update.workspace
     
     session.add(db_input)
     await session.commit()
