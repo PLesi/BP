@@ -10,7 +10,6 @@ from ..services.services import RESERVED_KEYWORDS
 router = APIRouter(prefix="/inputs", tags=["inputs"])
 
 def check_if_input_exists(input: Input | None):
-    """Helper function to check if input exists"""
     if not input:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -33,14 +32,12 @@ async def create_input(
     input: InputCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    # Check if input name is a reserved keyword
     if input.name.lower() in RESERVED_KEYWORDS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Input name '{input.name}' is a reserved keyword and cannot be used"
         )
     
-    # Check if config exists
     config_stmt = select(Config).where(Config.id == input.config_id)
     config_result = await session.execute(config_stmt)
     config = config_result.scalar_one_or_none()
@@ -51,7 +48,6 @@ async def create_input(
             detail="Config not found"
         )
     
-    # Create input_limit if provided
     input_limit_id = None
     if input.input_limit:
         db_input_limit = InputLimit(
@@ -62,7 +58,6 @@ async def create_input(
         await session.flush()
         input_limit_id = db_input_limit.id
     
-    # Create input
     db_input = Input(
         config_id=input.config_id,
         type=input.type,
@@ -86,7 +81,6 @@ async def update_input(
     input_update: InputCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    # Check if input name is a reserved keyword
     if input_update.name.lower() in RESERVED_KEYWORDS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

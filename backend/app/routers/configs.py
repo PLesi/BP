@@ -52,7 +52,6 @@ async def create_config(
     config: ConfigCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    # Does device exist?
     device_stmt = select(Device).where(Device.id == config.device_id)
     device_result = await session.execute(device_stmt)
     device = device_result.scalar_one_or_none()
@@ -63,7 +62,6 @@ async def create_config(
             detail="Device not found"
         )
 
-    # Does software exist?    
     if config.software_id:
         software_stmt = select(Software).where(Software.id == config.software_id)
         software_result = await session.execute(software_stmt)
@@ -75,7 +73,6 @@ async def create_config(
                 detail="Software not found"
             )
 
-    # Create time limits  
     time_limit_id = None
     if config.time_limit:
         db_time_limit = TimeLimit(
@@ -86,7 +83,6 @@ async def create_config(
         await session.flush()
         time_limit_id = db_time_limit.id
 
-    # Create config
     db_config = Config(
         device_id=config.device_id,
         port=config.port,
@@ -98,7 +94,6 @@ async def create_config(
     session.add(db_config)
     await session.commit()
     
-    # Reload with relationships
     stmt = select(Config).where(Config.id == db_config.id).options(
         selectinload(Config.software),
         selectinload(Config.time_limit),
@@ -156,7 +151,6 @@ async def update_config(
     else:
         db_config.software_id = None
     
-    # Change the time limits
     if config_update.time_limit:
         db_time_limit = TimeLimit(
             period=config_update.time_limit.period,
@@ -168,14 +162,13 @@ async def update_config(
     else:
         db_config.time_limit_id = None
     
-    # Update output_path and port
     db_config.output_path = config_update.output_path
     db_config.port = config_update.port
     
     session.add(db_config)
     await session.commit()
 
-    # Reload with relationships required by ConfigPublic to avoid async lazy-load errors
+    # reload so ConfigPublic gets all nested relationships
     stmt = select(Config).where(Config.id == id).options(
         selectinload(Config.software),
         selectinload(Config.time_limit),

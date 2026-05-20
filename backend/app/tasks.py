@@ -65,7 +65,7 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
     except json.JSONDecodeError:
         pass
 
-    # Parse key=value or key:value pairs.
+    # key=value or key:value pairs
     pairs = {}
     for token in re.split(r"[;,]\s*", raw):
         if "=" in token:
@@ -84,7 +84,7 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
     if pairs:
         return {"time": round(elapsed, 6), **pairs}
 
-    # Fallback: CSV numbers → map using column headers or v1..vN.
+    # fallback: CSV numbers mapped to column headers or v1..vN
     numbers = [_to_float(m.group(0)) for m in _NUM_RE.finditer(raw)]
     values = [n for n in numbers if n is not None]
     if values:
@@ -93,13 +93,13 @@ def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None 
             if columns and idx < len(columns):
                 col = columns[idx]
                 if col.lower() in {"time", "t", "timestamp"}:
-                    # Use simulation time as chart x-axis.
+                    # first column is usually time on x-axis
                     point["time"] = round(num, 6)
                 else:
                     point[col] = num
             else:
                 point[f"v{idx + 1}"] = num
-        # Only return if there is at least one non-time field.
+        # skip if only time field survived
         if len(point) > 1:
             return point
 
@@ -169,7 +169,6 @@ async def run_experiment(experiment: dict):
     run_start_ts = asyncio.get_running_loop().time()
     out_columns: list[str] | None = None
 
-    # Validate that input arguments don't use reserved keywords
     input_arguments = experiment.get("input_arguments", {})
     for input_name in input_arguments:
         if input_name.lower() in RESERVED_KEYWORDS:
@@ -205,7 +204,6 @@ async def run_experiment(experiment: dict):
     print(f"Sending 'starting' message for task {task_id}")
     await ws_manager.send_message(task_id, {"status": "starting", "device_id": device_id})
 
-    print(f"Starting subprocess for task {task_id}")
     process = await asyncio.create_subprocess_exec(
         sys.executable, os.path.join(os.path.dirname(__file__), '..', '..', 'test_device_script.py'),
         '--task-id', task_id,
@@ -253,7 +251,7 @@ async def run_experiment(experiment: dict):
             try:
                 data = json.loads(output)
 
-                # Handle column header announcement from start.py.
+                # column header announcement
                 if isinstance(data, dict) and data.get("status") == "headers":
                     out_columns = data.get("columns") or None
                     continue
@@ -261,9 +259,7 @@ async def run_experiment(experiment: dict):
                 if isinstance(data, dict) and "time" in data:
                     output_history.append(data)
 
-                # If this message carries a raw out_line, extract the chart
-                # point from the line text (using column headers when available)
-                # instead of relying on numeric fields embedded in the payload.
+                # raw out_line — extract chart point from text using headers if available
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                     chart_point = _chart_point_from_line(data["out_line"], elapsed, out_columns)
@@ -298,7 +294,7 @@ async def run_experiment(experiment: dict):
                     })
 
     async def stream_output_file_fallback():
-        # If nothing arrives on stdout, stream new lines from output file directly.
+        # nothing on stdout after 3s — read output file directly
         await asyncio.sleep(3)
         if stdout_seen:
             return

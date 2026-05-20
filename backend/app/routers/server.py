@@ -86,14 +86,12 @@ async def enqueue_server_experiment(
         sample_rate=experiment.sample_rate,
     )
 
-    # Validate software exists on the device
     if not device.config.software or device.config.software.name != experiment.software_name:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Software '{experiment.software_name}' not found on device '{experiment.device_name}'"
         )
 
-    # Reclaim obviously stale locks left behind by interrupted runs.
     if redis_client.exists(f"device_lock:{device.id}"):
         if not _reclaim_stale_device_lock(device.id):
             raise HTTPException(

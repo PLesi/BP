@@ -9,7 +9,6 @@ from ..models import Config, Device, Input
 
 
 async def get_devices_with_details(session: AsyncSession) -> list[Device]:
-	"""Return all devices with related config, software, inputs, outputs and time limit."""
 	stmt = select(Device).options(
 		selectinload(Device.config).selectinload(Config.software),
 		selectinload(Device.config).selectinload(Config.inputs).selectinload(Input.input_limit),
@@ -26,12 +25,7 @@ import logging
 _log = logging.getLogger(__name__)
 
 def check_device_online(port: str, slx_model: str) -> dict:
-    """
-    Skontroluje tri vrstvy pripravenosti zariadenia.
-    
-    Returns:
-        {"online": bool, "usable": bool, "reason": str}
-    """
+    # returns {"online": bool, "usable": bool, "reason": str}
     _log.debug("[check_device_online] port=%r slx_model=%r", port, slx_model)
 
     try:
@@ -41,7 +35,6 @@ def check_device_online(port: str, slx_model: str) -> dict:
         _log.warning("[check_device_online] FAIL – %s", reason)
         return {"online": False, "usable": False, "reason": reason}
 
-    # 1. Serial port (fyzický HW)
     if not os.path.exists(port):
         reason = f"Port {port} not found"
         _log.warning("[check_device_online] FAIL – %s", reason)
@@ -49,7 +42,6 @@ def check_device_online(port: str, slx_model: str) -> dict:
 
     _log.debug("[check_device_online] port %r exists", port)
 
-    # 2. MATLAB engine
     try:
         engines = matlab.engine.find_matlab()
     except Exception as e:
@@ -64,7 +56,6 @@ def check_device_online(port: str, slx_model: str) -> dict:
         _log.warning("[check_device_online] FAIL – %s", reason)
         return {"online": False, "usable": False, "reason": reason}
 
-    # 3. Simulink model status
     try:
         matlab_instance = matlab.engine.connect_matlab(engines[0])
         _log.debug("[check_device_online] connected to engine %r", engines[0])

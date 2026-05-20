@@ -8,24 +8,19 @@ import sys
 import json
 import re
 
-# Custom logging mechanism for this script
 import logging
 
-logger = logging.getLogger('uDAQ_logger')  # Create logger witn name 'uDAQ_logger'.
-logger.setLevel(logging.DEBUG)  # Set up logging utility with level=DEBUG (lowest)
-# Create file handler for 'uDAQ_logger'.
+logger = logging.getLogger('uDAQ_logger')
+logger.setLevel(logging.DEBUG)
 fhandler = logging.FileHandler("/home/mackousko/Documents/pymatlab.log")
 fhandler.setLevel(logging.DEBUG)
-# Specify format of LOG messages and assign it to handler.
 logformat = logging.Formatter('[%(asctime)s] - %(name)s - [%(levelname)s] - %(message)s')
 fhandler.setFormatter(logformat)
-# Assign file handler to 'uDAQ_logger' logging facility.
 logger.addHandler(fhandler)
 logger.info('_:: Python MATLAB start.py logger was initialized. ::_')
 
 
 
-# Argument parser for olm-api arguments.
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -49,7 +44,7 @@ def _coerce_numeric(value):
     if isinstance(value, (int, float)):
         return float(value)
 
-    # matlab.double / list-like containers often come as one-element arrays.
+# matlab.double / list-like containers often come as one-element arrays
     if isinstance(value, (list, tuple)):
         if not value:
             return None
@@ -167,8 +162,6 @@ if matlab_instance is None:
     matlab_instance = matlab.engine.connect_matlab(matlab.engine.find_matlab()[0])
 
 
-# Clear output variables in workspace from previous experiment runs.
-logger.info('Clearing MATLAB workspace output variables.')
 matlab_instance.workspace['outputs'] = {'temp':0, 'f_temp':0, 'intens':0, 'f_intens':0, 'fan_amp':0, 'fan_rpm':0, 'ambt':0}
 
 logger.info('setting MATLAB workspace input variables:')
@@ -184,7 +177,7 @@ else:
     out_path = os.path.join(matlab_cwd, args.output)
 
 # Simulation parameters as port, simulation time, sampling rate.
-matlab_instance.workspace['com_port'] = args.port  # COM port
+matlab_instance.workspace['com_port'] = args.port
 matlab_instance.workspace['out_path'] = out_path
 
 matlab_instance.workspace['simparams'] = {
@@ -193,14 +186,13 @@ matlab_instance.workspace['simparams'] = {
     'duration':float(0)  # Sampled duration - output from simulation
 } 
 
-# Input values for system variables - built dynamically from validated inputs.
-# Reg-specific keys are excluded; everything else is treated as a device input.
+# device inputs — anything that's not a reg param
 _reg_keys = {'reg_output', 'reg_signal', 'reg_target', 'Kc', 'Ti', 'U_min', 'U_max'}
 matlab_instance.workspace['inputs'] = {
     k: float(v) for k, v in inputs.items() if k not in _reg_keys
 }
 
-# Map reg_output / reg_signal string names to MATLAB numeric codes.
+# string names to MATLAB numeric codes
 _reg_output_map = {'temperature': 1.0, 'light_intensity': 2.0, 'fan_rpm': 3.0}
 _reg_signal_map = {'bulb': 1.0, 'fan': 2.0, 'led': 3.0}
 reg_output = {'reg_output': _reg_output_map[inputs['reg_output']]} if inputs.get('reg_output') in _reg_output_map else {}
@@ -208,12 +200,12 @@ reg_signal = {'reg_signal': _reg_signal_map[inputs['reg_signal']]} if inputs.get
 
 # Regulator specific values.    
 matlab_instance.workspace['regparams'] = {
-    **reg_signal, **reg_output,  # Merge values for acion variable and desired value
-    'reg_target':float(inputs['reg_target']),  # Target value for regulator
-    'Kc':float(inputs['Kc']),  # Kc parameter of regulator
-    'Ti':float(inputs['Ti']),  # Ti parameter of regulator
-    'U_min':float(inputs['U_min']),  # U_min limiter parameter
-    'U_max':float(inputs['U_max'])  # U_max limiter parameter
+    **reg_signal, **reg_output,
+    'reg_target':float(inputs['reg_target']),
+    'Kc':float(inputs['Kc']),
+    'Ti':float(inputs['Ti']),
+    'U_min':float(inputs['U_min']),
+    'U_max':float(inputs['U_max'])
 }
 
 logger.info('MATLAB workspace variables set...')

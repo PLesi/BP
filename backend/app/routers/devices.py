@@ -112,17 +112,14 @@ async def delete_device(
     if db_device.config:
         config = db_device.config
 
-        # Delete inputs and their limits
         for inp in config.inputs:
             if inp.input_limit:
                 await session.delete(inp.input_limit)
             await session.delete(inp)
 
-        # Delete outputs
         for out in config.outputs:
             await session.delete(out)
 
-        # Delete time limit
         if config.time_limit:
             await session.delete(config.time_limit)
 

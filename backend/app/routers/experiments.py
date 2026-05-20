@@ -53,26 +53,22 @@ async def run_experiment(
 async def websocket_endpoint(websocket: WebSocket, task_id: str):
     await ws_manager.connect(websocket, task_id)
     
-    # Subscribe to Redis channel for this task
     pubsub = redis_client.pubsub()
     pubsub.subscribe(f"ws:{task_id}")
     
     async def listen_redis():
-        """Listen for messages from worker via Redis in non-blocking way"""
         while True:
             message = pubsub.get_message(ignore_subscribe_messages=True)
             if message and message['type'] == 'message':
                 data = json.loads(message['data'])
                 await websocket.send_json(data)
                 
-                # Check if experiment is completed
                 if data.get('status') == 'completed':
                     break
             
-            await asyncio.sleep(0.01)  # Small delay to not block event loop
+            await asyncio.sleep(0.01)
     
     try:
-        # Listen to Redis messages
         await listen_redis()
     except WebSocketDisconnect:
         pass

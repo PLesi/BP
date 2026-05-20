@@ -8,7 +8,6 @@ from ..db import get_session
 router = APIRouter(prefix="/outputs", tags=["outputs"])
 
 def check_if_output_exists(output: Output | None):
-    """Helper function to check if output exists"""
     if not output:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -35,7 +34,6 @@ async def create_output(
     output: OutputCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    # Check if config exists
     config_stmt = select(Config).where(Config.id == output.config_id)
     config_result = await session.execute(config_stmt)
     config = config_result.scalar_one_or_none()
@@ -46,7 +44,6 @@ async def create_output(
             detail="Config not found"
         )
     
-    # Create output
     db_output = Output(
         config_id=output.config_id,
         type=output.type,
@@ -64,14 +61,12 @@ async def update_output(
     output_update: OutputCreate,
     session: AsyncSession = Depends(get_session)
 ):
-    # Find existing output
     stmt = select(Output).where(Output.id == id)
     result = await session.execute(stmt)
     db_output = result.scalar_one_or_none()
     
     check_if_output_exists(db_output)
     
-    # Check if config changed
     if output_update.config_id != db_output.config_id:
         config_stmt = select(Config).where(Config.id == output_update.config_id)
         config_result = await session.execute(config_stmt)
@@ -85,7 +80,6 @@ async def update_output(
         
         db_output.config_id = output_update.config_id
     
-    # Update fields
     db_output.type = output_update.type
     db_output.name = output_update.name
     

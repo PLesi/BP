@@ -50,17 +50,6 @@ async def validate_experiment(
     simulation_time: float,
     sample_rate: float,
 ) -> Device:
-    """
-    Validuje experiment podľa novej spec:
-    - Device existuje (lookup by name)
-    - Config existuje
-    - Všetky required inputy sú prítomné
-    - Typy inputov sa zhodujú s DB definíciou
-    - Input hodnoty sú v limitoch
-    - simulation_time / sample_rate sú v rámci time_limit
-    """
-
-    # 1. Načítaj device by name s config a všetkými vzťahmi
     stmt = (
         select(Device)
         .where(Device.name == device_name)
@@ -85,7 +74,6 @@ async def validate_experiment(
             detail="Device has no configuration"
         )
 
-    # 2. Validuj time_limit
     if device.config.time_limit:
         if simulation_time > device.config.time_limit.period:
             raise HTTPException(
@@ -98,10 +86,9 @@ async def validate_experiment(
                 detail=f"sample_rate {sample_rate} exceeds maximum {device.config.time_limit.frequency}"
             )
 
-    # 3. Vytvor dict inputov podľa názvu pre rýchle vyhľadávanie
     required_inputs = {inp.name: inp for inp in device.config.inputs}
 
-    # 3.4 Validuj, že žiadny input name v DB nie je reserved keyword
+    # reject reserved keywords saved in DB config
     for input_name in required_inputs:
         if input_name.lower() in RESERVED_KEYWORDS:
             raise HTTPException(
@@ -109,7 +96,6 @@ async def validate_experiment(
                 detail=f"Device configuration error: Input '{input_name}' is a reserved keyword. Please remove or rename this input."
             )
 
-    # 3.5 Validuj, že žiadny input name nie je reserved keyword
     for input_name in input_arguments:
         if input_name.lower() in RESERVED_KEYWORDS:
             raise HTTPException(
@@ -117,7 +103,6 @@ async def validate_experiment(
                 detail=f"Input name '{input_name}' is a reserved keyword and cannot be used"
             )
 
-    # 4. Skontroluj, že všetky required inputy sú prítomné
     for input_name in required_inputs:
         if input_name not in input_arguments:
             raise HTTPException(
@@ -125,7 +110,6 @@ async def validate_experiment(
                 detail=f"Missing required input: {input_name}"
             )
 
-    # 5. Skontroluj, že user neposlal neznáme inputy
     for input_name in input_arguments:
         if input_name not in required_inputs:
             raise HTTPException(
@@ -133,12 +117,10 @@ async def validate_experiment(
                 detail=f"Unknown input: {input_name}"
             )
 
-    # 6. Validuj typy a limity pre každý input
     for input_name, arg in input_arguments.items():
         input_def = required_inputs[input_name]
         value = arg.value
 
-        # Map spec type ("number") to DB type ("float"/"int") loosely
         db_type = input_def.type
         if db_type in ("float", "int", "number"):
             if not isinstance(value, (int, float)) or isinstance(value, bool):
@@ -153,7 +135,6 @@ async def validate_experiment(
                     detail=f"Input '{input_name}' must be boolean, got {type(value).__name__}"
                 )
 
-        # Validuj limity
         if input_def.input_limit and isinstance(value, (int, float)):
             if value < input_def.input_limit.min:
                 raise HTTPException(
@@ -169,15 +150,6 @@ async def validate_experiment(
     return device
 
 def get_task_device_id(task_id: str) -> int | None:
-    """
-    Find device_id for a given task_id by scanning device queues.
-
-    Args:
-        task_id: The unique task identifier
-
-    Returns:
-        device_id if found, None othervise
-    """
     for key in redis_client.scan_iter("device_queue:*"):
         tasks = redis_client.lrange(key, 0, -1)
         for task_json in tasks:
@@ -190,14 +162,6 @@ def get_task_device_id(task_id: str) -> int | None:
     return None
 
 def calculate_estimated_wait_time(device_id: int, task_id: str):
-    """
-    Calculate estimated wait time and queue position for a task.
-
-    Returns:
-        dict with:
-            - queue_position
-            - estimated_wait_time 
-    """
     queue_key = f"device_queue:{device_id}"
     lock_key = f"device_lock:{device_id}"
 
@@ -208,7 +172,6 @@ def calculate_estimated_wait_time(device_id: int, task_id: str):
     total_wait_time = 0
     found = False
 
-    # If device is currently locked, add time for the running task
     if is_locked:
         total_wait_time += 60
 
