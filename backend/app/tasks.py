@@ -250,18 +250,14 @@ async def run_experiment(experiment: dict):
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                     chart_point = _parse_point(data["out_line"], elapsed, out_columns)
+                    if chart_point:
+                        output_history.append(chart_point)
                     await ws_manager.send_message(task_id, {
                         "status": "running",
                         "device_id": device_id,
-                        "data": data
+                        "data": data,
+                        "chart_point": chart_point,
                     })
-                    if chart_point:
-                        output_history.append(chart_point)
-                        await ws_manager.send_message(task_id, {
-                            "status": "chart_point",
-                            "device_id": device_id,
-                            "data": chart_point,
-                        })
                 else:
                     await send_running_with_chart(data)
             except json.JSONDecodeError:
