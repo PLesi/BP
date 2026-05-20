@@ -178,10 +178,10 @@ matlab_instance.workspace['com_port'] = args.port
 matlab_instance.workspace['out_path'] = out_path
 
 matlab_instance.workspace['simparams'] = {
-    't_sim':float(args.duration),  # Simulation time
-    'Ts':1/float(args.sampletime),  # Sampling rate
-    'duration':float(0)  # Sampled duration - output from simulation
-} 
+    't_sim': float(args.duration),          # Simulation time in seconds
+    'Ts': 1.0 / float(args.sampletime),     # Sampling period in seconds
+    'duration': float(0)                    # Sampled duration — written back by simulation
+}
 
 # device inputs — anything that's not a reg param
 _reg_keys = {'reg_output', 'reg_signal', 'reg_target', 'Kc', 'Ti', 'U_min', 'U_max'}
@@ -210,6 +210,13 @@ model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
 model_name = os.path.splitext(os.path.basename(model_file))[0]
 
 matlab_instance.load_system(model_file)
+
+matlab_instance.set_param(model_name, 'StopTime', str(float(args.duration)), nargout=0)
+ts = 1.0 / float(args.sampletime)
+try:
+    matlab_instance.set_param(model_name, 'FixedStep', str(ts), nargout=0)
+except Exception:
+    pass  # variable-step solver — sample time is controlled inside the model
 
 try:
     matlab_instance.set_param(model_name, 'SimulationCommand', 'start', nargout=0)
