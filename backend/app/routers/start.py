@@ -253,6 +253,7 @@ if out_path:
 while True:
     status = matlab_instance.get_param(model_name, 'SimulationStatus')
     elapsed = round(time.time() - start_ts, 2)
+    data_sent = False
 
     if out_path and os.path.exists(out_path):
         current_size = os.path.getsize(out_path)
@@ -273,8 +274,11 @@ while True:
                 if re.search(r'[a-zA-Z_]', line.strip()):
                     continue
                 print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
+                data_sent = True
 
-    print(json.dumps({"time": elapsed, "status": "running", "sim_status": status}), flush=True)
+    # Only send the heartbeat when no out_line data was sent this tick.
+    if not data_sent:
+        print(json.dumps({"time": elapsed, "status": "running", "sim_status": status}), flush=True)
     if status == 'stopped':
         break
     time.sleep(1.0)
