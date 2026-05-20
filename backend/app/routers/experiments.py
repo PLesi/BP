@@ -7,7 +7,7 @@ import asyncio
 from ..models import ExperimentReq
 from ..db import get_session
 from ..websocket_manager import ws_manager
-from ..services.services import validate_experiment
+from ..services.services import validate_experiment, get_task_device_id, calculate_estimated_wait_time
 from ..redis_client import redis_client
 from ..tasks import device_worker
 
@@ -52,7 +52,13 @@ async def run_experiment(
 @router.websocket("/ws/{task_id}")
 async def websocket_endpoint(websocket: WebSocket, task_id: str):
     await ws_manager.connect(websocket, task_id)
-    
+
+    if not redis_client.exists(f"experiment:{task_id}"):
+        device_id = get_task_device_id(task_id)
+        if device_id is not None:
+            info = calculate_estimated_wait_time(device_id, task_id)
+            await websocket.send_json({"status": "queued", **info})
+
     pubsub = redis_client.pubsub()
     pubsub.subscribe(f"ws:{task_id}")
     

@@ -195,26 +195,19 @@ _reg_signal_map = {'bulb': 1.0, 'fan': 2.0, 'led': 3.0}
 reg_output = {'reg_output': _reg_output_map[inputs['reg_output']]} if inputs.get('reg_output') in _reg_output_map else {}
 reg_signal = {'reg_signal': _reg_signal_map[inputs['reg_signal']]} if inputs.get('reg_signal') in _reg_signal_map else {}
 
-# Regulator specific values.    
-matlab_instance.workspace['regparams'] = {
-    **reg_signal, **reg_output,
-    'reg_target':float(inputs['reg_target']),
-    'Kc':float(inputs['Kc']),
-    'Ti':float(inputs['Ti']),
-    'U_min':float(inputs['U_min']),
-    'U_max':float(inputs['U_max'])
-}
+_scalar_reg_keys = ['reg_target', 'Kc', 'Ti', 'U_min', 'U_max']
+regparams = {**reg_signal, **reg_output}
+for _k in _scalar_reg_keys:
+    if _k in inputs:
+        regparams[_k] = float(inputs[_k])
+matlab_instance.workspace['regparams'] = regparams
 
 logger.info('MATLAB workspace variables set...')
 logger.info('trying to run Simuling simulation on uDAQ28LT_system...')
 
-# Custom model hook kept for later use.
-# slx_model = args.slx_model.strip() if args.slx_model else 'PI_RED.slx'
-# model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
-# model_name = os.path.splitext(os.path.basename(model_file))[0]
-
-model_file = "PI_RED.slx"
-model_name = "PI_RED"
+slx_model = args.slx_model.strip() if args.slx_model else 'PI_RED.slx'
+model_file = slx_model if slx_model.endswith('.slx') else f"{slx_model}.slx"
+model_name = os.path.splitext(os.path.basename(model_file))[0]
 
 matlab_instance.load_system(model_file)
 
