@@ -44,6 +44,7 @@ interface ConfigOutput {
 interface PendingInput {
   name: string
   type: string
+  workspace: string
   input_limit: { min: number; max: number } | null
 }
 
@@ -111,6 +112,7 @@ const form = ref({
 const inputForm = ref({
   name: '',
   type: '',
+  workspace: 'inputs',
   limit_enabled: false,
   min: '',
   max: '',
@@ -170,7 +172,7 @@ function selectDevice(device: Device) {
       : NONE_SOFTWARE_VALUE,
     software_other_name: '',
   }
-  inputForm.value = { name: '', type: '', limit_enabled: false, min: '', max: '' }
+  inputForm.value = { name: '', type: '', workspace: 'inputs', limit_enabled: false, min: '', max: '' }
   outputForm.value = { name: '', type: '' }
   pendingInputs.value = []
   pendingOutputs.value = []
@@ -198,7 +200,7 @@ function clickNew() {
     software_choice: NONE_SOFTWARE_VALUE,
     software_other_name: '',
   }
-  inputForm.value = { name: '', type: '', limit_enabled: false, min: '', max: '' }
+  inputForm.value = { name: '', type: '', workspace: 'inputs', limit_enabled: false, min: '', max: '' }
   outputForm.value = { name: '', type: '' }
 }
 
@@ -305,12 +307,13 @@ async function addInput() {
   pendingInputs.value.push({
     name: inputForm.value.name.trim(),
     type: inputForm.value.type.trim(),
+    workspace: inputForm.value.workspace,
     input_limit: inputForm.value.limit_enabled
       ? { min: Number(inputForm.value.min), max: Number(inputForm.value.max) }
       : null,
   })
 
-  inputForm.value = { name: '', type: '', limit_enabled: false, min: '', max: '' }
+  inputForm.value = { name: '', type: '', workspace: 'inputs', limit_enabled: false, min: '', max: '' }
   ioSuccess.value = 'Input queued. It will be saved with Save.'
 }
 
@@ -367,6 +370,7 @@ async function flushPendingIo(configId: number) {
         config_id: configId,
         name: inp.name,
         type: inp.type,
+        workspace: inp.workspace,
         input_limit: inp.input_limit,
       }),
     })
@@ -889,12 +893,28 @@ onMounted(fetchAll)
               </div>
               <div class="space-y-1.5">
                 <Label class="text-zinc-400 text-sm">Input Type</Label>
-                <Input
+                <select
                   v-model="inputForm.type"
-                  placeholder="e.g. float"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
-                />
+                  class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+                >
+                  <option value="" disabled>Select type</option>
+                  <option value="float">float</option>
+                  <option value="int">int</option>
+                  <option value="bool">bool</option>
+                  <option value="string">string</option>
+                </select>
               </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <Label class="text-zinc-400 text-sm">Workspace</Label>
+              <select
+                v-model="inputForm.workspace"
+                class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+              >
+                <option value="inputs">inputs</option>
+                <option value="regparams">regparams</option>
+              </select>
             </div>
 
             <div class="flex items-center gap-2">
@@ -984,11 +1004,16 @@ onMounted(fetchAll)
               </div>
               <div class="space-y-1.5">
                 <Label class="text-zinc-400 text-sm">Output Type</Label>
-                <Input
+                <select
                   v-model="outputForm.type"
-                  placeholder="e.g. float"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
-                />
+                  class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+                >
+                  <option value="" disabled>Select type</option>
+                  <option value="float">float</option>
+                  <option value="int">int</option>
+                  <option value="bool">bool</option>
+                  <option value="string">string</option>
+                </select>
               </div>
             </div>
 
