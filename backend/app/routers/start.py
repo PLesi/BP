@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-# example command: python3 start.py --port=/dev/ttyUSB0 --output=out.txt --input=bulb:100,fan:0,led:100,reg_output:light_intensity,reg_signal:bulb,reg_target:35,Kc:2,Ti:1,U_min:0,U_max:5 --duration=10 --sampletime=10
+# example command: python3 start.py --port=/dev/ttyUSB0 --output=out.txt --input-json='{"fan":{"value":0},"bulb":{"value":100},"led":{"value":100},"reg_output":{"value":"light_intensity"},"reg_signal":{"value":"bulb"},"reg_target":{"value":35},"Kc":{"value":2},"Ti":{"value":1},"U_min":{"value":0},"U_max":{"value":5}}' --duration=10 --sampletime=10
 
 import time
 import os
@@ -31,17 +31,16 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--port', type=str, help='Path to serial device port e.g. /dev/ttyUSB0')
 parser.add_argument('--output', type=str, help='Path to output file e.g. output.txt')
-parser.add_argument('--input', type=str, help='Comma-separated key:value pairs of input parameters. e.g.: in_bulb:100,in_fan:100 etc...')
+parser.add_argument('--input-json', type=str, help='JSON object of validated input arguments, e.g. {"fan":{"value":0}, ...}')
 parser.add_argument('--duration', type=int, help='Duration of the simulation in seconds.')
 parser.add_argument('--sampletime', type=float, help='Sampling time in milliseconds.')
 parser.add_argument('--slx-model', type=str, default='PI_RED.slx', help='Simulink model filename (e.g. PI_RED.slx)')
 
 args = parser.parse_args()
-inputs = dict()
 
-for keyval_pair in args.input.split(','):
-    parameter = keyval_pair.split(':')
-    inputs[parameter[0]] = parameter[1]
+# Parse validated input arguments from JSON; extract plain value for each key.
+_raw_inputs = json.loads(args.input_json)
+inputs = {k: v['value'] for k, v in _raw_inputs.items()}
 
 
 def _coerce_numeric(value):
@@ -194,30 +193,18 @@ matlab_instance.workspace['simparams'] = {
     'duration':float(0)  # Sampled duration - output from simulation
 } 
 
-# Input values for system variables - light bulb, fan and LED.
+# Input values for system variables - built dynamically from validated inputs.
+# Reg-specific keys are excluded; everything else is treated as a device input.
+_reg_keys = {'reg_output', 'reg_signal', 'reg_target', 'Kc', 'Ti', 'U_min', 'U_max'}
 matlab_instance.workspace['inputs'] = {
-    'fan':float(inputs['fan']),  # Input value for fan
-    'bulb':float(inputs['bulb']),  # Input value for light bulb
-    'led':float(inputs['led'])  # Input value for LED diode
+    k: float(v) for k, v in inputs.items() if k not in _reg_keys
 }
 
-# Output variable for regulation i.e. wanted value.
-reg_output = dict()
-if inputs['reg_output'] == 'temperature':
-    reg_output = {'reg_output':float(1)}
-elif inputs['reg_output'] == 'light_intensity':
-    reg_output = {'reg_output':float(2)}
-elif inputs['reg_output'] == 'fan_rpm':
-    reg_output = {'reg_output':float(3)}
-
-# Control signal for regulation, i.e. action variable.
-reg_signal = dict()
-if inputs['reg_signal'] == 'bulb':
-    reg_signal = {'reg_signal':float(1)}
-elif inputs['reg_signal'] == 'fan':
-    reg_signal = {'reg_signal':float(2)}
-elif inputs['reg_signal'] == 'led':
-    reg_signal = {'reg_signal':float(3)}
+# Map reg_output / reg_signal string names to MATLAB numeric codes.
+_reg_output_map = {'temperature': 1.0, 'light_intensity': 2.0, 'fan_rpm': 3.0}
+_reg_signal_map = {'bulb': 1.0, 'fan': 2.0, 'led': 3.0}
+reg_output = {'reg_output': _reg_output_map[inputs['reg_output']]} if inputs.get('reg_output') in _reg_output_map else {}
+reg_signal = {'reg_signal': _reg_signal_map[inputs['reg_signal']]} if inputs.get('reg_signal') in _reg_signal_map else {}
 
 # Regulator specific values.    
 matlab_instance.workspace['regparams'] = {
@@ -256,11 +243,34 @@ if out_path and os.path.exists(out_path):
     # Start from EOF so WS gets only new lines from this run.
     last_out_pos = os.path.getsize(out_path)
 
+# Detect column headers from the first line of out.txt.
+# Wait up to 10 s for MATLAB to create/write the file.
+out_headers = None
+if out_path:
+    _wait = 0.0
+    while not os.path.exists(out_path) and _wait < 10:
+        time.sleep(0.5)
+        _wait += 0.5
+    if os.path.exists(out_path):
+        try:
+            with open(out_path, 'r', encoding='utf-8', errors='replace') as _hf:
+                _first = _hf.readline().strip()
+            if _first and re.search(r'[a-zA-Z_]', _first):
+                out_headers = [h.strip() for h in re.split(r'[,\t]', _first)]
+                print(json.dumps({"status": "headers", "columns": out_headers}), flush=True)
+        except OSError:
+            pass
+
 while True:
     status = matlab_instance.get_param(model_name, 'SimulationStatus')
     elapsed = round(time.time() - start_ts, 2)
 
     if out_path and os.path.exists(out_path):
+        current_size = os.path.getsize(out_path)
+        if current_size < last_out_pos:
+            # File was truncated/recreated — reset position.
+            last_out_pos = 0
+
         with open(out_path, 'r', encoding='utf-8', errors='replace') as out_file:
             out_file.seek(last_out_pos)
             chunk = out_file.read()
@@ -268,20 +278,14 @@ while True:
 
         if chunk:
             for line in chunk.splitlines():
-                if line.strip():
-                    output_point = _extract_numeric_outputs_from_line(line, elapsed)
-                    payload = {"time": elapsed, "status": "running", "out_line": line}
-                    if output_point:
-                        # Merge numeric fields to top level so downstream chart parser can see them.
-                        payload.update({k: v for k, v in output_point.items() if k != "time"})
-                    print(json.dumps(payload), flush=True)
+                if not line.strip():
+                    continue
+                # Skip header rows (lines that contain letters).
+                if re.search(r'[a-zA-Z_]', line.strip()):
+                    continue
+                print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
 
-    payload = {"time": elapsed, "status": "running", "sim_status": status}
-    live_outputs = _extract_numeric_outputs_from_matlab(matlab_instance, model_name)
-    if live_outputs:
-        payload.update(live_outputs)
-
-    print(json.dumps(payload), flush=True)
+    print(json.dumps({"time": elapsed, "status": "running", "sim_status": status}), flush=True)
     if status == 'stopped':
         break
     time.sleep(1.0)
@@ -295,12 +299,11 @@ if out_path and os.path.exists(out_path):
     if tail_chunk:
         final_elapsed = round(time.time() - start_ts, 2)
         for line in tail_chunk.splitlines():
-            if line.strip():
-                output_point = _extract_numeric_outputs_from_line(line, final_elapsed)
-                payload = {"time": final_elapsed, "status": "running", "out_line": line}
-                if output_point:
-                    payload.update({k: v for k, v in output_point.items() if k != "time"})
-                print(json.dumps(payload), flush=True)
+            if not line.strip():
+                continue
+            if re.search(r'[a-zA-Z_]', line.strip()):
+                continue
+            print(json.dumps({"time": final_elapsed, "status": "running", "out_line": line}), flush=True)
 
 logger.info('simulation stopped, closing MATLAB instance...')
 matlab_instance.quit()

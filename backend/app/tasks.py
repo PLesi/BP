@@ -52,7 +52,7 @@ def _chart_point_from_dict(data: dict) -> dict | None:
     return point if has_numeric else None
 
 
-def _chart_point_from_line(line: str, elapsed: float) -> dict | None:
+def _chart_point_from_line(line: str, elapsed: float, columns: list[str] | None = None) -> dict | None:
     raw = line.strip()
     if not raw:
         return None
@@ -84,14 +84,24 @@ def _chart_point_from_line(line: str, elapsed: float) -> dict | None:
     if pairs:
         return {"time": round(elapsed, 6), **pairs}
 
-    # Fallback: if line contains only numbers/CSV-like tokens, map to v1..vN.
+    # Fallback: CSV numbers → map using column headers or v1..vN.
     numbers = [_to_float(m.group(0)) for m in _NUM_RE.finditer(raw)]
     values = [n for n in numbers if n is not None]
     if values:
-        point = {"time": round(elapsed, 6)}
-        for idx, num in enumerate(values, start=1):
-            point[f"v{idx}"] = num
-        return point
+        point: dict = {"time": round(elapsed, 6)}
+        for idx, num in enumerate(values):
+            if columns and idx < len(columns):
+                col = columns[idx]
+                if col.lower() in {"time", "t", "timestamp"}:
+                    # Use simulation time as chart x-axis.
+                    point["time"] = round(num, 6)
+                else:
+                    point[col] = num
+            else:
+                point[f"v{idx + 1}"] = num
+        # Only return if there is at least one non-time field.
+        if len(point) > 1:
+            return point
 
     return None
 
@@ -157,6 +167,7 @@ async def run_experiment(experiment: dict):
     output_history: list[dict] = []
     started_at = datetime.now(UTC).isoformat()
     run_start_ts = asyncio.get_running_loop().time()
+    out_columns: list[str] | None = None
 
     # Validate that input arguments don't use reserved keywords
     input_arguments = experiment.get("input_arguments", {})
@@ -230,7 +241,7 @@ async def run_experiment(experiment: dict):
             })
 
     async def stream_stdout():
-        nonlocal stdout_seen
+        nonlocal stdout_seen, out_columns
         if process.stdout is None:
             return
         async for line in process.stdout:
@@ -241,12 +252,38 @@ async def run_experiment(experiment: dict):
             print(f"Output: {output}")
             try:
                 data = json.loads(output)
+
+                # Handle column header announcement from start.py.
+                if isinstance(data, dict) and data.get("status") == "headers":
+                    out_columns = data.get("columns") or None
+                    continue
+
                 if isinstance(data, dict) and "time" in data:
                     output_history.append(data)
-                await send_running_with_chart(data)
+
+                # If this message carries a raw out_line, extract the chart
+                # point from the line text (using column headers when available)
+                # instead of relying on numeric fields embedded in the payload.
+                if isinstance(data, dict) and "out_line" in data:
+                    elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
+                    chart_point = _chart_point_from_line(data["out_line"], elapsed, out_columns)
+                    await ws_manager.send_message(task_id, {
+                        "status": "running",
+                        "device_id": device_id,
+                        "data": data
+                    })
+                    if chart_point:
+                        output_history.append(chart_point)
+                        await ws_manager.send_message(task_id, {
+                            "status": "chart_point",
+                            "device_id": device_id,
+                            "data": chart_point,
+                        })
+                else:
+                    await send_running_with_chart(data)
             except json.JSONDecodeError:
                 elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
-                chart_point = _chart_point_from_line(output, elapsed)
+                chart_point = _chart_point_from_line(output, elapsed, out_columns)
                 await ws_manager.send_message(task_id, {
                     "status": "running",
                     "device_id": device_id,
@@ -300,7 +337,7 @@ async def run_experiment(experiment: dict):
                         }
                         output_history.append(payload)
                         await send_running_with_chart(payload)
-                        chart_point = _chart_point_from_line(line, elapsed)
+                        chart_point = _chart_point_from_line(line, elapsed, out_columns)
                         if chart_point:
                             output_history.append(chart_point)
                             await ws_manager.send_message(task_id, {

@@ -58,11 +58,6 @@ def pick_python_with_matlab() -> str:
         "Set MATLAB_PYTHON_EXECUTABLE to your system Python."
     )
 
-# Prekonvertuj JSON input_arguments na key:value,key:value format pre start.py
-input_str = ','.join(
-    f"{k}:{v['value']}" for k, v in input_arguments.items()
-)
-
 start_script = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'backend', 'app', 'routers', 'start.py'
@@ -73,7 +68,7 @@ cmd = [
     f'--port={args.port}',
     f'--output={args.output_path}',
     f'--slx-model={args.slx_model}',
-    f'--input={input_str}',
+    f'--input-json={args.input_arguments}',
     f'--duration={simulation_time}',
     f'--sampletime={sample_rate}',
 ]
