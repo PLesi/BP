@@ -152,10 +152,19 @@ async def run_experiment(experiment: dict):
     device_id = experiment["device_id"]
     experiment_key = f"experiment:{task_id}"
     output_history: list[dict] = []
+
+    def _log_input_args(raw: dict) -> dict:
+        """Strip internal fields (workspace) from input args for the log."""
+        _exclude = {"workspace"}
+        return {
+            k: {f: v for f, v in arg.items() if f not in _exclude}
+            for k, arg in raw.items()
+        }
+
     input_history: list[dict] = [
         {
             "command": "start",
-            "input_args": experiment.get("input_arguments", {}),
+            "input_args": _log_input_args(experiment.get("input_arguments", {})),
             "applied_at": 0.0,
         }
     ]
@@ -347,7 +356,7 @@ async def run_experiment(experiment: dict):
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                     input_history.append({
                         "command": "change",
-                        "input_args": change.get("input_args", {}),
+                        "input_args": _log_input_args(change.get("input_args", {})),
                         "applied_at": elapsed,
                     })
                 except (json.JSONDecodeError, KeyError):

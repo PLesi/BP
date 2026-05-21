@@ -309,9 +309,17 @@ class ExperimentStopReq(BaseModel):
 
 # ── Experiment response / log models ────────────────────────────────────────
 
+class ExperimentInputArgLog(BaseModel):
+    """Input argument as stored in the experiment log — no internal routing fields."""
+    value: int | float | bool | str
+    type: Literal["number", "string", "boolean"]
+    unit: str
+    order: int
+
+
 class ExperimentInputHistoryEntry(BaseModel):
     command: str
-    input_args: dict[str, ExperimentInputArgument]
+    input_args: dict[str, ExperimentInputArgLog]
     applied_at: float
 
 
