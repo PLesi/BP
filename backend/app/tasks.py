@@ -249,10 +249,15 @@ async def run_experiment(experiment: dict):
                 # raw out_line — parse with column headers if available
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
-                    chart_point = _parse_point(data["out_line"], elapsed, out_columns)
+                    out_line = data["out_line"]
+                    if isinstance(out_line, dict):
+                        # start.py already parsed it into a named dict
+                        chart_point = out_line
+                    else:
+                        chart_point = _parse_point(out_line, elapsed, out_columns)
                     if chart_point:
                         output_history.append(chart_point)
-                        # Replace raw CSV string with named dict so clients see real field names
+                        # Ensure out_line is always a named dict for WS clients
                         await ws_manager.send_message(task_id, {
                             "status": "running",
                             "device_id": device_id,
