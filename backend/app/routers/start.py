@@ -203,7 +203,10 @@ for _k, _meta in _input_meta.items():
             _ws_regparams[_k] = float(_value)
     else:
         if not isinstance(_value, bool):
-            _ws_inputs[_k] = float(_value)
+            if isinstance(_value, str):
+                _ws_inputs[_k] = _str_to_num.get(_value, 0.0)
+            else:
+                _ws_inputs[_k] = float(_value)
 
 matlab_instance.workspace['inputs'] = _ws_inputs
 matlab_instance.workspace['regparams'] = _ws_regparams
