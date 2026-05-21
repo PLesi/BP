@@ -9,6 +9,8 @@ interface Software {
   name: string
 }
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 const list = ref<Software[]>([])
 const selected = ref<Software | null>(null)
 const isNew = ref(false)
@@ -19,7 +21,7 @@ const success = ref(false)
 const name = ref('')
 
 async function fetchAll() {
-  const res = await fetch('http://localhost:8000/software')
+  const res = await fetch(`${API_BASE}/software`)
   list.value = await res.json()
 }
 
@@ -51,8 +53,8 @@ async function save() {
   loading.value = true; error.value = null; success.value = false
   try {
     const url = isNew.value
-      ? 'http://localhost:8000/software'
-      : `http://localhost:8000/software/${selected.value!.id}`
+      ? `${API_BASE}/software`
+      : `${API_BASE}/software/${selected.value!.id}`
     const res = await fetch(url, {
       method: isNew.value ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },

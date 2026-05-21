@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 const DEVICE_TYPES = ['sensor', 'actuator', 'controller', 'gateway']
 
 const formSchema = toTypedSchema(
@@ -52,7 +54,7 @@ const onSubmit = form.handleSubmit(async (values) => {
   success.value = false
   error.value = null
   try {
-    const res = await fetch('http://localhost:8000/devices', {
+    const res = await fetch(`${API_BASE}/devices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

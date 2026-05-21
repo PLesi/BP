@@ -44,6 +44,8 @@ const form = ref({
 })
 
 // New input/output form
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+
 const newInput = ref({ type: '', name: '', workspace: 'inputs', has_limit: false, min: '', max: '' })
 const newOutput = ref({ type: '', name: '' })
 const inputError = ref<string | null>(null)
@@ -51,9 +53,9 @@ const outputError = ref<string | null>(null)
 
 async function fetchAll() {
   const [cr, dr, sr] = await Promise.all([
-    fetch('http://localhost:8000/configs'),
-    fetch('http://localhost:8000/devices'),
-    fetch('http://localhost:8000/software'),
+    fetch(`${API_BASE}/configs`),
+    fetch(`${API_BASE}/devices`),
+    fetch(`${API_BASE}/software`),
   ])
   configs.value = await cr.json()
   devices.value = await dr.json()
@@ -116,7 +118,7 @@ async function saveConfig() {
       : null,
   }
   try {
-    const url = isNew.value ? 'http://localhost:8000/configs' : `http://localhost:8000/configs/${selected.value!.id}`
+    const url = isNew.value ? `${API_BASE}/configs` : `${API_BASE}/configs/${selected.value!.id}`
     const res = await fetch(url, { method: isNew.value ? 'POST' : 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (!res.ok) { const d = await res.json(); throw new Error(d?.detail ?? `Error ${res.status}`) }
     const saved: Config = await res.json()
@@ -139,7 +141,7 @@ async function addInput() {
       ? { min: Number(newInput.value.min), max: Number(newInput.value.max) }
       : null,
   }
-  const res = await fetch('http://localhost:8000/inputs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const res = await fetch(`${API_BASE}/inputs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) { const d = await res.json(); inputError.value = d?.detail ?? 'Error'; return }
   await fetchAll()
   const fresh = configs.value.find(c => c.id === selected.value!.id)
@@ -148,7 +150,7 @@ async function addInput() {
 }
 
 async function deleteInput(id: number) {
-  await fetch(`http://localhost:8000/inputs/${id}`, { method: 'DELETE' })
+  await fetch(`${API_BASE}/inputs/${id}`, { method: 'DELETE' })
   await fetchAll()
   const fresh = configs.value.find(c => c.id === selected.value!.id)
   if (fresh) selectConfig(fresh)
@@ -158,7 +160,7 @@ async function addOutput() {
   if (!newOutput.value.type.trim() || !newOutput.value.name.trim()) { outputError.value = 'Type and name are required.'; return }
   outputError.value = null
   const payload = { config_id: selected.value!.id, type: newOutput.value.type.trim(), name: newOutput.value.name.trim() }
-  const res = await fetch('http://localhost:8000/outputs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const res = await fetch(`${API_BASE}/outputs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   if (!res.ok) { const d = await res.json(); outputError.value = d?.detail ?? 'Error'; return }
   await fetchAll()
   const fresh = configs.value.find(c => c.id === selected.value!.id)
@@ -167,7 +169,7 @@ async function addOutput() {
 }
 
 async function deleteOutput(id: number) {
-  await fetch(`http://localhost:8000/outputs/${id}`, { method: 'DELETE' })
+  await fetch(`${API_BASE}/outputs/${id}`, { method: 'DELETE' })
   await fetchAll()
   const fresh = configs.value.find(c => c.id === selected.value!.id)
   if (fresh) selectConfig(fresh)

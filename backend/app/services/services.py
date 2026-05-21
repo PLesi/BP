@@ -192,30 +192,19 @@ def get_task_device_id(task_id: str) -> int | None:
 
 def calculate_estimated_wait_time(device_id: int, task_id: str):
     queue_key = f"device_queue:{device_id}"
-    lock_key = f"device_lock:{device_id}"
-
-    is_locked = redis_client.exists(lock_key)
     queued_tasks = redis_client.lrange(queue_key, 0, -1)
 
     queue_position = 0
-    total_wait_time = 0
-    found = False
-
-    if is_locked:
-        total_wait_time += 60
 
     for idx, task_json in enumerate(queued_tasks):
-        try: 
+        try:
             task = json.loads(task_json)
             if task.get('task_id') == task_id:
                 queue_position = idx + 1
-                found = True
                 break
-            total_wait_time += task.get('period', 60)
         except json.JSONDecodeError:
-            total_wait_time += 60
+            pass
 
     return {
         "queue_position": queue_position,
-        "estimated_wait_time": total_wait_time
     }
