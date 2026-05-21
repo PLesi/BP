@@ -442,6 +442,18 @@ async function createTestDevice() {
 
     const createdDevice: Device = await devRes.json()
 
+    // Create software entry so experiment validation can match software_name.
+    const swRes = await fetch(`${API_BASE}/software`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'PI_RED' }),
+    })
+    if (!swRes.ok) {
+      const data = await swRes.json().catch(() => ({}))
+      throw new Error(data?.detail ?? `Software create failed (${swRes.status})`)
+    }
+    const createdSoftware = await swRes.json()
+
     const configRes = await fetch(`${API_BASE}/configs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -449,10 +461,10 @@ async function createTestDevice() {
         device_id: createdDevice.id,
         port: '/dev/ttyUSB0',
         output_path: 'out.txt',
-        software_id: null,
+        software_id: createdSoftware.id,
         time_limit: {
-          period: 60,
-          frequency: 10,
+          period: 300,
+          frequency: 100,
         },
       }),
     })
@@ -465,15 +477,16 @@ async function createTestDevice() {
     const configId = cfg.id as number
 
     const inputs = [
-      { name: 'bulb', type: 'number', input_limit: { min: 0, max: 100 } },
-      { name: 'fan', type: 'number', input_limit: { min: 0, max: 100 } },
-      { name: 'led', type: 'number', input_limit: { min: 0, max: 100 } },
-      { name: 'reg_signal', type: 'string', input_limit: null },
-      { name: 'reg_target', type: 'number', input_limit: null },
-      { name: 'Kc', type: 'number', input_limit: null },
-      { name: 'Ti', type: 'number', input_limit: null },
-      { name: 'U_min', type: 'number', input_limit: null },
-      { name: 'U_max', type: 'number', input_limit: null },
+      { name: 'bulb',       type: 'number', workspace: 'inputs',    input_limit: { min: 0, max: 100 } },
+      { name: 'fan',        type: 'number', workspace: 'inputs',    input_limit: { min: 0, max: 100 } },
+      { name: 'led',        type: 'number', workspace: 'inputs',    input_limit: { min: 0, max: 100 } },
+      { name: 'reg_output', type: 'string', workspace: 'regparams', input_limit: null },
+      { name: 'reg_signal', type: 'string', workspace: 'regparams', input_limit: null },
+      { name: 'reg_target', type: 'number', workspace: 'regparams', input_limit: null },
+      { name: 'Kc',         type: 'number', workspace: 'regparams', input_limit: null },
+      { name: 'Ti',         type: 'number', workspace: 'regparams', input_limit: null },
+      { name: 'U_min',      type: 'number', workspace: 'regparams', input_limit: null },
+      { name: 'U_max',      type: 'number', workspace: 'regparams', input_limit: null },
     ]
 
     for (const inputDef of inputs) {
@@ -484,6 +497,7 @@ async function createTestDevice() {
           config_id: configId,
           name: inputDef.name,
           type: inputDef.type,
+          workspace: inputDef.workspace,
           input_limit: inputDef.input_limit,
         }),
       })
@@ -494,7 +508,6 @@ async function createTestDevice() {
     }
 
     const outputs = [
-      { name: 'reg_output', type: 'number' },
       { name: 'light_intensity', type: 'number' },
     ]
 
@@ -517,7 +530,7 @@ async function createTestDevice() {
     await fetchDevices()
     const created = devices.value.find((d) => d.id === createdDevice.id)
     if (created) selectDevice(created)
-    ioSuccess.value = 'Quick test device created with config, inputs and outputs.'
+    ioSuccess.value = `Quick test device '${testName}' created. Use software_name "PI_RED" in experiment requests.`
   } catch (e: any) {
     saveError.value = e.message
   }
