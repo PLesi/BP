@@ -323,7 +323,6 @@ class ExperimentOutputHistoryEntry(BaseModel):
 class ExperimentRunLog(BaseModel):
     input_history: list[ExperimentInputHistoryEntry]
     output_history: list[ExperimentOutputHistoryEntry]
-    setpoint_changes: ExperimentSetpointChanges | None = None
 
 
 class FinishedExperiment(BaseModel):

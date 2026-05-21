@@ -4,7 +4,7 @@ import uuid
 import json
 import asyncio
 
-from ..models import ExperimentReq
+from ..models import ExperimentReq, ExperimentChangeReq
 from ..db import get_session
 from ..websocket_manager import ws_manager
 from ..services.services import validate_experiment, get_task_device_id, calculate_estimated_wait_time
@@ -61,21 +61,54 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
 
     pubsub = redis_client.pubsub()
     pubsub.subscribe(f"ws:{task_id}")
-    
+    done_event = asyncio.Event()
+
     async def listen_redis():
         while True:
             message = pubsub.get_message(ignore_subscribe_messages=True)
             if message and message['type'] == 'message':
                 data = json.loads(message['data'])
                 await websocket.send_json(data)
-                
-                if data.get('status') == 'completed':
+
+                if data.get('status') in ('completed', 'failed'):
+                    done_event.set()
                     break
-            
+
             await asyncio.sleep(0.01)
-    
+
+    async def listen_client():
+        """Accept change/stop commands from the WS client."""
+        try:
+            while not done_event.is_set():
+                msg = await websocket.receive_json()
+                command = msg.get("command")
+                if command == "change":
+                    try:
+                        req = ExperimentChangeReq.model_validate(msg)
+                        change_payload = json.dumps({
+                            "input_args": {k: v.model_dump() for k, v in req.input_arguments.items()}
+                        })
+                        redis_client.lpush(f"input_changes:{task_id}", change_payload)
+                        await websocket.send_json({"status": "change_accepted"})
+                    except Exception as exc:
+                        await websocket.send_json({"error": f"Invalid change request: {exc}"})
+                else:
+                    await websocket.send_json({"error": f"Unsupported command: {command!r}"})
+        except WebSocketDisconnect:
+            done_event.set()
+
     try:
-        await listen_redis()
+        redis_task = asyncio.create_task(listen_redis())
+        client_task = asyncio.create_task(listen_client())
+        done, pending = await asyncio.wait(
+            [redis_task, client_task], return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
     except WebSocketDisconnect:
         pass
     finally:

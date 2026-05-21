@@ -152,6 +152,13 @@ async def run_experiment(experiment: dict):
     device_id = experiment["device_id"]
     experiment_key = f"experiment:{task_id}"
     output_history: list[dict] = []
+    input_history: list[dict] = [
+        {
+            "command": "start",
+            "input_args": experiment.get("input_arguments", {}),
+            "applied_at": 0.0,
+        }
+    ]
     started_at = datetime.now(UTC).isoformat()
     run_start_ts = asyncio.get_running_loop().time()
     out_columns: list[str] | None = None
@@ -243,35 +250,37 @@ async def run_experiment(experiment: dict):
                     out_columns = data.get("columns") or None
                     continue
 
-                if isinstance(data, dict) and "time" in data:
-                    output_history.append(data)
-
-                # raw out_line — parse with column headers if available
+                # out_line from out.txt — parse into clean named dict
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                     out_line = data["out_line"]
                     if isinstance(out_line, dict):
-                        # start.py already parsed it into a named dict
                         chart_point = out_line
                     else:
                         chart_point = _parse_point(out_line, elapsed, out_columns)
                     if chart_point:
                         output_history.append(chart_point)
-                        # Ensure out_line is always a named dict for WS clients
                         await ws_manager.send_message(task_id, {
                             "status": "running",
                             "device_id": device_id,
                             "data": {**data, "out_line": chart_point},
                         })
                     else:
-                        # No columns yet — fall back to raw string
                         await ws_manager.send_message(task_id, {
                             "status": "running",
                             "device_id": device_id,
                             "data": data,
                         })
                 else:
-                    await send_running_with_chart(data)
+                    # Heartbeat / direct measurement — extract clean point if present
+                    chart_point = _make_point(data) if isinstance(data, dict) else None
+                    if chart_point:
+                        output_history.append(chart_point)
+                    await ws_manager.send_message(task_id, {
+                        "status": "running",
+                        "device_id": device_id,
+                        "data": data,
+                    })
             except json.JSONDecodeError:
                 elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                 chart_point = _parse_point(output, elapsed, out_columns)
@@ -282,11 +291,6 @@ async def run_experiment(experiment: dict):
                 })
                 if chart_point:
                     output_history.append(chart_point)
-                    await ws_manager.send_message(task_id, {
-                        "status": "chart_point",
-                        "device_id": device_id,
-                        "data": chart_point,
-                    })
 
     async def stream_output_file_fallback():
         # nothing on stdout after 3s — read output file directly
@@ -326,52 +330,63 @@ async def run_experiment(experiment: dict):
                             "out_line": line,
                             "source": "output_file",
                         }
-                        output_history.append(payload)
                         await send_running_with_chart(payload)
                         chart_point = _parse_point(line, elapsed, out_columns)
                         if chart_point:
                             output_history.append(chart_point)
-                            await ws_manager.send_message(task_id, {
-                                "status": "chart_point",
-                                "device_id": device_id,
-                                "data": chart_point,
-                            })
 
             await asyncio.sleep(0.5)
 
+    async def poll_input_changes():
+        """Poll Redis for incoming change commands pushed by WS clients."""
+        while process.returncode is None:
+            change_raw = redis_client.rpop(f"input_changes:{task_id}")
+            if change_raw:
+                try:
+                    change = json.loads(change_raw)
+                    elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
+                    input_history.append({
+                        "command": "change",
+                        "input_args": change.get("input_args", {}),
+                        "applied_at": elapsed,
+                    })
+                except (json.JSONDecodeError, KeyError):
+                    pass
+            await asyncio.sleep(0.1)
+
     stdout_task = asyncio.create_task(stream_stdout())
     fallback_task = asyncio.create_task(stream_output_file_fallback())
+    change_poll_task = asyncio.create_task(poll_input_changes())
 
     await stdout_task
     await process.wait()
     await fallback_task
+    change_poll_task.cancel()
+    try:
+        await change_poll_task
+    except asyncio.CancelledError:
+        pass
+    # Clean up change queue for this task
+    redis_client.delete(f"input_changes:{task_id}")
+
+    def _build_run() -> dict:
+        return {
+            "input_history": input_history,
+            "output_history": output_history,
+        }
 
     if process.returncode != 0:
         stderr_output = await process.stderr.read()
         error_text = stderr_output.decode().strip() if stderr_output else "Unknown execution error"
-        redis_client.set(
-            experiment_key,
-            json.dumps(
-                {
-                    "device_name": experiment.get("device_name", ""),
-                    "software_name": experiment.get("software_name", ""),
-                    "run": {
-                        "input_history": [
-                            {
-                                "command": "start",
-                                "input_args": experiment.get("input_arguments", {}),
-                                "applied_at": 0.0,
-                            }
-                        ],
-                        "output_history": output_history,
-                        "setpoint_changes": experiment.get("setpoint_changes"),
-                    },
-                    "started_at": started_at,
-                    "finished_at": datetime.now(UTC).isoformat(),
-                    "finish_reason": f"failed: {error_text}",
-                }
-            ),
-        )
+        failed_log = {
+            "device_name": experiment.get("device_name", ""),
+            "software_name": experiment.get("software_name", ""),
+            "run": _build_run(),
+            "started_at": started_at,
+            "finished_at": datetime.now(UTC).isoformat(),
+            "finish_reason": f"failed: {error_text}",
+        }
+        redis_client.set(experiment_key, json.dumps(failed_log))
         await ws_manager.send_message(
             task_id,
             {
@@ -382,31 +397,22 @@ async def run_experiment(experiment: dict):
         )
         return
 
-    redis_client.set(
-        experiment_key,
-        json.dumps(
-            {
-                "device_name": experiment.get("device_name", ""),
-                "software_name": experiment.get("software_name", ""),
-                "run": {
-                    "input_history": [
-                        {
-                            "command": "start",
-                            "input_args": experiment.get("input_arguments", {}),
-                            "applied_at": 0.0,
-                        }
-                    ],
-                    "output_history": output_history,
-                    "setpoint_changes": experiment.get("setpoint_changes"),
-                },
-                "started_at": started_at,
-                "finished_at": datetime.now(UTC).isoformat(),
-                "finish_reason": "simulation_time_reached",
-            }
-        ),
-    )
+    finished_at = datetime.now(UTC).isoformat()
+    final_log = {
+        "device_name": experiment.get("device_name", ""),
+        "software_name": experiment.get("software_name", ""),
+        "run": _build_run(),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "finish_reason": "simulation_time_reached",
+    }
+    redis_client.set(experiment_key, json.dumps(final_log))
     print(f"Experiment completed for task {task_id}")
-    await ws_manager.send_message(task_id, {"status": "completed", "device_id": device_id})
+    await ws_manager.send_message(task_id, {
+        "status": "completed",
+        "device_id": device_id,
+        "result": final_log,
+    })
 
 async def update_queue_positions(device_id: int):
     queue_key = f"device_queue:{device_id}"
