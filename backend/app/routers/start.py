@@ -259,7 +259,28 @@ if out_path:
         except OSError:
             pass
 
-while True:
+def _parse_csv_line(line: str, headers: list[str] | None, elapsed: float) -> dict | None:
+    """Parse a CSV line into a named dict using column headers."""
+    parts = re.split(r'[,\t]', line.strip())
+    values = []
+    for p in parts:
+        try:
+            values.append(float(p.strip()))
+        except ValueError:
+            return None
+    if not values:
+        return None
+    point: dict = {"time": round(elapsed, 6)}
+    for i, v in enumerate(values):
+        if headers and i < len(headers):
+            col = headers[i]
+            if col.lower() in {"time", "t", "timestamp"}:
+                point["time"] = round(v, 6)
+            else:
+                point[col] = v
+        else:
+            point[f"v{i + 1}"] = v
+    return point if len(point) > 1 else None
     status = matlab_instance.get_param(model_name, 'SimulationStatus')
     elapsed = round(time.time() - start_ts, 2)
     data_sent = False
@@ -282,7 +303,9 @@ while True:
                 # Skip header rows (lines that contain letters).
                 if re.search(r'[a-zA-Z_]', line.strip()):
                     continue
-                print(json.dumps({"time": elapsed, "status": "running", "out_line": line}), flush=True)
+                named = _parse_csv_line(line, out_headers, elapsed)
+                out_line_val = named if named is not None else line
+                print(json.dumps({"time": elapsed, "status": "running", "out_line": out_line_val}), flush=True)
                 data_sent = True
 
     # Only send the heartbeat when no out_line data was sent this tick.
@@ -305,7 +328,9 @@ if out_path and os.path.exists(out_path):
                 continue
             if re.search(r'[a-zA-Z_]', line.strip()):
                 continue
-            print(json.dumps({"time": final_elapsed, "status": "running", "out_line": line}), flush=True)
+            named = _parse_csv_line(line, out_headers, final_elapsed)
+            out_line_val = named if named is not None else line
+            print(json.dumps({"time": final_elapsed, "status": "running", "out_line": out_line_val}), flush=True)
 
 logger.info('simulation stopped, closing MATLAB instance...')
 matlab_instance.quit()

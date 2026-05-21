@@ -246,18 +246,25 @@ async def run_experiment(experiment: dict):
                 if isinstance(data, dict) and "time" in data:
                     output_history.append(data)
 
-                # raw out_line — extract chart point from text using headers if available
+                # raw out_line — parse with column headers if available
                 if isinstance(data, dict) and "out_line" in data:
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                     chart_point = _parse_point(data["out_line"], elapsed, out_columns)
                     if chart_point:
                         output_history.append(chart_point)
-                    await ws_manager.send_message(task_id, {
-                        "status": "running",
-                        "device_id": device_id,
-                        "data": data,
-                        "chart_point": chart_point,
-                    })
+                        # Replace raw CSV string with named dict so clients see real field names
+                        await ws_manager.send_message(task_id, {
+                            "status": "running",
+                            "device_id": device_id,
+                            "data": {**data, "out_line": chart_point},
+                        })
+                    else:
+                        # No columns yet — fall back to raw string
+                        await ws_manager.send_message(task_id, {
+                            "status": "running",
+                            "device_id": device_id,
+                            "data": data,
+                        })
                 else:
                     await send_running_with_chart(data)
             except json.JSONDecodeError:
