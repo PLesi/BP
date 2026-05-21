@@ -281,6 +281,9 @@ def _parse_csv_line(line: str, headers: list[str] | None, elapsed: float) -> dic
         else:
             point[f"v{i + 1}"] = v
     return point if len(point) > 1 else None
+
+
+while True:
     status = matlab_instance.get_param(model_name, 'SimulationStatus')
     elapsed = round(time.time() - start_ts, 2)
     data_sent = False
