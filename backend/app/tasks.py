@@ -152,6 +152,7 @@ async def run_experiment(experiment: dict):
     device_id = experiment["device_id"]
     experiment_key = f"experiment:{task_id}"
     output_history: list[dict] = []
+    stopped_by_user: list[bool] = [False]  # mutable flag accessible from inner coroutines
 
     def _log_input_args(raw: dict) -> dict:
         """Strip internal fields (workspace) from input args for the log."""
@@ -347,18 +348,55 @@ async def run_experiment(experiment: dict):
             await asyncio.sleep(0.5)
 
     async def poll_input_changes():
-        """Poll Redis for incoming change commands pushed by WS clients."""
+        """Poll Redis for incoming change/stop commands and apply them."""
+        change_script = os.path.join(os.path.dirname(__file__), 'routers', 'change.py')
+        stop_script = os.path.join(os.path.dirname(__file__), 'routers', 'stop.py')
         while process.returncode is None:
+            # --- stop signal ---
+            if redis_client.rpop(f"stop_signal:{task_id}"):
+                stopped_by_user[0] = True
+                stop_proc = await asyncio.create_subprocess_exec(
+                    sys.executable, stop_script,
+                    '--slx-model', experiment.get("slx_model", "PI_RED.slx"),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await stop_proc.communicate()
+                # start.py will detect SimulationStatus==stopped and exit naturally.
+                break
             change_raw = redis_client.rpop(f"input_changes:{task_id}")
             if change_raw:
                 try:
                     change = json.loads(change_raw)
                     elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
+                    input_args = change.get("input_args", {})
                     input_history.append({
                         "command": "change",
-                        "input_args": _log_input_args(change.get("input_args", {})),
+                        "input_args": _log_input_args(input_args),
                         "applied_at": elapsed,
                     })
+                    # Invoke change.py to update MATLAB workspace variables.
+                    change_proc = await asyncio.create_subprocess_exec(
+                        sys.executable, change_script,
+                        '--slx-model', experiment.get("slx_model", "PI_RED.slx"),
+                        '--input-json', json.dumps(input_args),
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    change_stdout, change_stderr = await change_proc.communicate()
+                    if change_proc.returncode != 0:
+                        err = change_stderr.decode().strip() if change_stderr else "unknown error"
+                        await ws_manager.send_message(task_id, {
+                            "status": "change_failed",
+                            "device_id": device_id,
+                            "error": err,
+                        })
+                    else:
+                        await ws_manager.send_message(task_id, {
+                            "status": "change_applied",
+                            "device_id": device_id,
+                            "applied_at": elapsed,
+                        })
                 except (json.JSONDecodeError, KeyError):
                     pass
             await asyncio.sleep(0.1)
@@ -375,8 +413,9 @@ async def run_experiment(experiment: dict):
         await change_poll_task
     except asyncio.CancelledError:
         pass
-    # Clean up change queue for this task
+    # Clean up per-task Redis keys
     redis_client.delete(f"input_changes:{task_id}")
+    redis_client.delete(f"stop_signal:{task_id}")
 
     def _build_run() -> dict:
         return {
@@ -407,18 +446,20 @@ async def run_experiment(experiment: dict):
         return
 
     finished_at = datetime.now(UTC).isoformat()
+    finish_reason = "user_stopped" if stopped_by_user[0] else "simulation_time_reached"
     final_log = {
         "device_name": experiment.get("device_name", ""),
         "software_name": experiment.get("software_name", ""),
         "run": _build_run(),
         "started_at": started_at,
         "finished_at": finished_at,
-        "finish_reason": "simulation_time_reached",
+        "finish_reason": finish_reason,
     }
     redis_client.set(experiment_key, json.dumps(final_log))
-    print(f"Experiment completed for task {task_id}")
+    print(f"Experiment {'stopped' if stopped_by_user[0] else 'completed'} for task {task_id}")
+    ws_status = "stopped" if stopped_by_user[0] else "completed"
     await ws_manager.send_message(task_id, {
-        "status": "completed",
+        "status": ws_status,
         "device_id": device_id,
         "result": final_log,
     })

@@ -88,6 +88,11 @@
   <button id="btnWsRun">4) Run WS Test Experiment</button>
   <button id="btnWsConnect">5) Connect WS by Task ID</button>
   <button id="btnWsDisconnect">6) Disconnect WS</button>
+  <button id="btnWsChange">7) Send WS Change</button>
+  <button id="btnWsStop">8) Send WS Stop</button>
+
+  <h3>Change Command Payload</h3>
+  <textarea id="wsChangePayload" rows="14" style="width:100%;font-family:monospace;font-size:13px;box-sizing:border-box;"></textarea>
 
   <video id="video" autoplay playsinline controls></video>
 
@@ -125,8 +130,28 @@
       btnStop: document.getElementById('btnStop'),
       btnWsRun: document.getElementById('btnWsRun'),
       btnWsConnect: document.getElementById('btnWsConnect'),
-      btnWsDisconnect: document.getElementById('btnWsDisconnect')
+      btnWsDisconnect: document.getElementById('btnWsDisconnect'),
+      btnWsChange: document.getElementById('btnWsChange'),
+      btnWsStop: document.getElementById('btnWsStop'),
+      wsChangePayload: document.getElementById('wsChangePayload')
     };
+
+    // Pre-fill change payload textarea with a sample matching the start payload.
+    el.wsChangePayload.value = JSON.stringify({
+      command: 'change',
+      input_arguments: {
+        bulb:       { value: 80,               type: 'number', unit: '%',  order: 1, workspace: 'inputs' },
+        fan:        { value: 50,               type: 'number', unit: '%',  order: 2, workspace: 'inputs' },
+        led:        { value: 100,              type: 'number', unit: '%',  order: 3, workspace: 'inputs' },
+        reg_output: { value: 'light_intensity', type: 'string', unit: '-', order: 4, workspace: 'regparams' },
+        reg_signal: { value: 'bulb',           type: 'string', unit: '-', order: 5, workspace: 'regparams' },
+        reg_target: { value: 40,               type: 'number', unit: 'lx', order: 6, workspace: 'regparams' },
+        Kc:         { value: 2,                type: 'number', unit: '-',  order: 7, workspace: 'regparams' },
+        Ti:         { value: 1,                type: 'number', unit: 's',  order: 8, workspace: 'regparams' },
+        U_min:      { value: 0,                type: 'number', unit: 'V',  order: 9, workspace: 'regparams' },
+        U_max:      { value: 5,                type: 'number', unit: 'V',  order: 10, workspace: 'regparams' }
+      }
+    }, null, 2);
 
     function resetStats() {
       prevInboundBytes = null;
@@ -534,6 +559,34 @@
 
     el.btnWsDisconnect.addEventListener('click', () => {
       disconnectWs();
+    });
+
+    el.btnWsChange.addEventListener('click', () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        wsLog('Cannot send change: WebSocket is not connected.');
+        alert('WebSocket is not connected. Run an experiment first.');
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(el.wsChangePayload.value);
+      } catch (e) {
+        wsLog(`Invalid JSON in change payload: ${e.message}`);
+        alert(`Invalid JSON: ${e.message}`);
+        return;
+      }
+      ws.send(JSON.stringify(payload));
+      wsLog(`Sent change command: ${JSON.stringify(payload)}`);
+    });
+
+    el.btnWsStop.addEventListener('click', () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        wsLog('Cannot send stop: WebSocket is not connected.');
+        alert('WebSocket is not connected. Run an experiment first.');
+        return;
+      }
+      ws.send(JSON.stringify({ command: 'stop' }));
+      wsLog('Sent stop command.');
     });
   </script>
 </body>

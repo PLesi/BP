@@ -85,7 +85,7 @@ async def validate_experiment(
             maint_end_dt += timedelta(days=1)
         if now < maint_end_dt and maint_start_dt < exp_end:
             raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                status_code=status.HTTP_409_CONFLICT,
                 detail=(
                     f"Device '{device_name}' is in maintenance window "
                     f"({device.maintenance_start} – {device.maintenance_end}). "

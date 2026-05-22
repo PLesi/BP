@@ -17,6 +17,7 @@ from ..models import (
     ServerSyncPublic,
     ServerExperimentPublic,
     ExperimentReq,
+    ExperimentChangeReq,
     FinishedExperiment,
     UnfinishedExperiment,
     ExperimentNotFoundResponse,
@@ -143,7 +144,7 @@ async def stream_job_updates(websocket: WebSocket, job_id: str):
             if message and message.get("type") == "message":
                 payload = json.loads(message["data"])
                 await websocket.send_json({"job_id": job_id, **payload})
-                if payload.get("status") == "completed":
+                if payload.get("status") in ("completed", "stopped", "failed"):
                     break
             await asyncio.sleep(0.05)
     finally:
@@ -192,9 +193,9 @@ async def get_server_devices(
         devices_payload.append(
             {
                 "name": device.name,
-                "maintenance_start": "04:00:00",
-                "maintenance_end": "04:05:00",
-                "device_type": device.device_type,
+                "maintenance_start": str(device.maintenance_start) if device.maintenance_start else None,
+                "maintenance_end": str(device.maintenance_end) if device.maintenance_end else None,
+                "device_type": {"name": device.device_type} if device.device_type else None,
                 "software": [{"name": software_name}],
             }
         )
@@ -217,9 +218,9 @@ async def get_server_sync(
         devices_payload.append(
             {
                 "name": device.name,
-                "maintenance_start": "04:00:00",
-                "maintenance_end": "04:05:00",
-                "device_type": {"name": device.device_type or ""},
+                "maintenance_start": str(device.maintenance_start) if device.maintenance_start else None,
+                "maintenance_end": str(device.maintenance_end) if device.maintenance_end else None,
+                "device_type": {"name": device.device_type} if device.device_type else None,
                 "software": [{"name": software_name}],
             }
         )
@@ -271,31 +272,102 @@ async def ws_server_experiments(
     await websocket.accept()
     await websocket.send_json({"status": "ready", "message": "WebSocket connected"})
 
+    active_job: list[str | None] = [None]
+    disconnect_event = asyncio.Event()
+
+    async def handle_client_messages():
+        try:
+            while not disconnect_event.is_set():
+                message = await websocket.receive_json()
+                command = message.get("command")
+
+                if command == "start":
+                    if active_job[0]:
+                        await websocket.send_json({"error": "An experiment is already running"})
+                        continue
+                    try:
+                        req = ExperimentReq.model_validate(message)
+                    except ValidationError as exc:
+                        await websocket.send_json({"error": "Invalid request", "detail": exc.errors()})
+                        continue
+                    try:
+                        job_id = await enqueue_server_experiment(req, session)
+                    except HTTPException as exc:
+                        await websocket.send_json({"error": exc.detail, "status_code": exc.status_code})
+                        continue
+                    active_job[0] = job_id
+                    await websocket.send_json({"job_id": job_id, "status": "queued"})
+
+                elif command == "change":
+                    if not active_job[0]:
+                        await websocket.send_json({"error": "No active experiment to change"})
+                        continue
+                    try:
+                        req = ExperimentChangeReq.model_validate(message)
+                        redis_client.lpush(
+                            f"input_changes:{active_job[0]}",
+                            json.dumps({"input_args": {k: v.model_dump() for k, v in req.input_arguments.items()}}),
+                        )
+                        await websocket.send_json({"status": "change_accepted"})
+                    except Exception as exc:
+                        await websocket.send_json({"error": f"Invalid change request: {exc}"})
+
+                elif command == "stop":
+                    if not active_job[0]:
+                        await websocket.send_json({"error": "No active experiment to stop"})
+                        continue
+                    redis_client.lpush(f"stop_signal:{active_job[0]}", "1")
+                    await websocket.send_json({"status": "stop_accepted"})
+
+                else:
+                    await websocket.send_json({"error": f"Unsupported command: {command!r}"})
+        except WebSocketDisconnect:
+            disconnect_event.set()
+
+    async def stream_experiment_updates():
+        try:
+            while not disconnect_event.is_set():
+                job_id = active_job[0]
+                if not job_id:
+                    await asyncio.sleep(0.05)
+                    continue
+                pubsub = redis_client.pubsub()
+                pubsub.subscribe(f"ws:{job_id}")
+                try:
+                    while not disconnect_event.is_set():
+                        msg = pubsub.get_message(ignore_subscribe_messages=True)
+                        if msg and msg.get("type") == "message":
+                            payload = json.loads(msg["data"])
+                            await websocket.send_json({"job_id": job_id, **payload})
+                            if payload.get("status") in ("completed", "stopped", "failed"):
+                                final_raw = redis_client.get(f"experiment:{job_id}")
+                                if final_raw:
+                                    await websocket.send_json({
+                                        "job_id": job_id,
+                                        "status": "final",
+                                        "result": json.loads(final_raw),
+                                    })
+                                active_job[0] = None
+                                break
+                        await asyncio.sleep(0.05)
+                finally:
+                    pubsub.unsubscribe(f"ws:{job_id}")
+                    pubsub.close()
+        except Exception:
+            disconnect_event.set()
+
+    client_task = asyncio.create_task(handle_client_messages())
+    stream_task = asyncio.create_task(stream_experiment_updates())
     try:
-        while True:
-            message = await websocket.receive_json()
-            command = message.get("command")
-
-            if command != "start":
-                await websocket.send_json({"error": "Unsupported command. Use command='start'."})
-                continue
-
+        done, pending = await asyncio.wait(
+            [client_task, stream_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for t in pending:
+            t.cancel()
             try:
-                req = ExperimentReq.model_validate(message)
-            except ValidationError as exc:
-                await websocket.send_json({"error": "Invalid request", "detail": exc.errors()})
-                continue
-
-            try:
-                job_id = await enqueue_server_experiment(req, session)
-            except HTTPException as exc:
-                await websocket.send_json({"error": exc.detail, "status_code": exc.status_code})
-                continue
-
-            await websocket.send_json({"job_id": job_id, "status": "queued"})
-            await stream_job_updates(websocket, job_id)
-            final_raw = redis_client.get(f"experiment:{job_id}")
-            if final_raw:
-                await websocket.send_json({"job_id": job_id, "status": "final", "result": json.loads(final_raw)})
+                await t
+            except asyncio.CancelledError:
+                pass
     except WebSocketDisconnect:
-        return
+        pass

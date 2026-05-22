@@ -143,11 +143,15 @@ class ServerDeviceSoftwarePublic(BaseModel):
     name: str
 
 
+class ServerSyncDeviceTypePublic(BaseModel):
+    name: str
+
+
 class ServerDevicePublic(BaseModel):
     name: str
-    maintenance_start: str
-    maintenance_end: str
-    device_type: str | None = None
+    maintenance_start: str | None = None
+    maintenance_end: str | None = None
+    device_type: ServerSyncDeviceTypePublic | None = None
     software: list[ServerDeviceSoftwarePublic]
 
 
@@ -155,15 +159,11 @@ class ServerDevicesPublic(BaseModel):
     devices: list[ServerDevicePublic]
 
 
-class ServerSyncDeviceTypePublic(BaseModel):
-    name: str
-
-
 class ServerSyncDevicePublic(BaseModel):
     name: str
-    maintenance_start: str
-    maintenance_end: str
-    device_type: ServerSyncDeviceTypePublic
+    maintenance_start: str | None = None
+    maintenance_end: str | None = None
+    device_type: ServerSyncDeviceTypePublic | None = None
     software: list[ServerDeviceSoftwarePublic]
 
 

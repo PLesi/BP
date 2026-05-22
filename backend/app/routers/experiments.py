@@ -70,7 +70,7 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
                 data = json.loads(message['data'])
                 await websocket.send_json(data)
 
-                if data.get('status') in ('completed', 'failed'):
+                if data.get('status') in ('completed', 'failed', 'stopped'):
                     done_event.set()
                     break
 
@@ -92,6 +92,9 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
                         await websocket.send_json({"status": "change_accepted"})
                     except Exception as exc:
                         await websocket.send_json({"error": f"Invalid change request: {exc}"})
+                elif command == "stop":
+                    redis_client.lpush(f"stop_signal:{task_id}", "1")
+                    await websocket.send_json({"status": "stop_accepted"})
                 else:
                     await websocket.send_json({"error": f"Unsupported command: {command!r}"})
         except WebSocketDisconnect:
