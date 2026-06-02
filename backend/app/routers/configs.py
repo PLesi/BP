@@ -5,9 +5,9 @@ from sqlmodel import select
 
 from ..models import Config, ConfigCreate, ConfigPublic, Device, TimeLimit, Software, Input
 from ..db import get_session
+from ..services.services import verify_admin_api_key
 
-
-router = APIRouter(prefix="/configs", tags=["configs"])
+router = APIRouter(prefix="/configs", tags=["configs"], dependencies=[Depends(verify_admin_api_key)])
 
 @router.get("", response_model=list[ConfigPublic])
 async def get_configs(session: AsyncSession = Depends(get_session)):

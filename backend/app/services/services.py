@@ -34,6 +34,14 @@ def verify_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
 
 
+def verify_admin_api_key(x_api_key: str | None = Header(default=None, alias="X-API-Key")):
+    expected_key = os.getenv("ADMIN_API_KEY")
+    if not expected_key:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Admin API key is not configured")
+    if x_api_key != expected_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+
+
 async def validate_experiment(
     session: AsyncSession,
     device_name: str,

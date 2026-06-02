@@ -150,6 +150,7 @@ def device_worker(device_id: int):
 async def run_experiment(experiment: dict):
     task_id = experiment["task_id"]
     device_id = experiment["device_id"]
+    device_name = experiment.get("device_name", "")
     experiment_key = f"experiment:{task_id}"
     output_history: list[dict] = []
     stopped_by_user: list[bool] = [False]  # mutable flag accessible from inner coroutines
@@ -208,6 +209,7 @@ async def run_experiment(experiment: dict):
     print(f"Sending 'starting' message for task {task_id}")
     await ws_manager.send_message(task_id, {"status": "starting", "device_id": device_id})
 
+    redis_client.set(f"device_running:{device_name}", task_id)
     process = await asyncio.create_subprocess_exec(
         sys.executable, os.path.join(os.path.dirname(__file__), '..', '..', 'test_device_script.py'),
         '--task-id', task_id,
@@ -443,6 +445,7 @@ async def run_experiment(experiment: dict):
                 "error": error_text,
             },
         )
+        redis_client.delete(f"device_running:{device_name}")
         return
 
     finished_at = datetime.now(UTC).isoformat()
@@ -463,6 +466,7 @@ async def run_experiment(experiment: dict):
         "device_id": device_id,
         "result": final_log,
     })
+    redis_client.delete(f"device_running:{device_name}")
 
 async def update_queue_positions(device_id: int):
     queue_key = f"device_queue:{device_id}"

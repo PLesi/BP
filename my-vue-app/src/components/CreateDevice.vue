@@ -29,6 +29,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { apiFetch } from '@/lib/api'
+
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 const DEVICE_TYPES = ['sensor', 'actuator', 'controller', 'gateway']
@@ -54,7 +56,7 @@ const onSubmit = form.handleSubmit(async (values) => {
   success.value = false
   error.value = null
   try {
-    const res = await fetch(`${API_BASE}/devices`, {
+    const res = await apiFetch(`${API_BASE}/devices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

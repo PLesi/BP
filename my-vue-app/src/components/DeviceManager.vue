@@ -90,6 +90,7 @@ const showDeleteModal = ref(false)
 const deleteConfirmText = ref('')
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { apiFetch } from '@/lib/api'
 
 const NONE_SOFTWARE_VALUE = '__none__'
 const OTHER_SOFTWARE_VALUE = '__other__'
@@ -124,7 +125,7 @@ const outputForm = ref({
 })
 
 async function fetchDevices() {
-  const res = await fetch(`${API_BASE}/devices`)
+  const res = await apiFetch(`${API_BASE}/devices`)
   if (!res.ok) {
     throw new Error(`Failed to fetch devices (${res.status})`)
   }
@@ -132,7 +133,7 @@ async function fetchDevices() {
 }
 
 async function fetchSoftware() {
-  const res = await fetch(`${API_BASE}/software`)
+  const res = await apiFetch(`${API_BASE}/software`)
   if (!res.ok) {
     throw new Error(`Failed to fetch software (${res.status})`)
   }
@@ -234,7 +235,7 @@ async function ensureSoftwareId(): Promise<number | null> {
     return existing.id
   }
 
-  const createRes = await fetch(`${API_BASE}/software`, {
+  const createRes = await apiFetch(`${API_BASE}/software`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: newName }),
@@ -277,7 +278,7 @@ async function upsertConfig(deviceId: number): Promise<number | null> {
     ? `${API_BASE}/configs/${configId}`
     : `${API_BASE}/configs`
 
-  const configRes = await fetch(url, {
+  const configRes = await apiFetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(configPayload),
@@ -324,7 +325,7 @@ function removePendingInput(index: number) {
 async function removeInput(inputId: number) {
   ioError.value = null
   ioSuccess.value = null
-  const res = await fetch(`${API_BASE}/inputs/${inputId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${API_BASE}/inputs/${inputId}`, { method: 'DELETE' })
   if (!res.ok) {
     ioError.value = `Input delete failed (${res.status})`
     return
@@ -363,7 +364,7 @@ function removePendingOutput(index: number) {
 
 async function flushPendingIo(configId: number) {
   for (const inp of pendingInputs.value) {
-    const res = await fetch(`${API_BASE}/inputs`, {
+    const res = await apiFetch(`${API_BASE}/inputs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -381,7 +382,7 @@ async function flushPendingIo(configId: number) {
   }
 
   for (const out of pendingOutputs.value) {
-    const res = await fetch(`${API_BASE}/outputs`, {
+    const res = await apiFetch(`${API_BASE}/outputs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -400,7 +401,7 @@ async function flushPendingIo(configId: number) {
 async function removeOutput(outputId: number) {
   ioError.value = null
   ioSuccess.value = null
-  const res = await fetch(`${API_BASE}/outputs/${outputId}`, { method: 'DELETE' })
+  const res = await apiFetch(`${API_BASE}/outputs/${outputId}`, { method: 'DELETE' })
   if (!res.ok) {
     ioError.value = `Output delete failed (${res.status})`
     return
@@ -424,7 +425,7 @@ async function createTestDevice() {
   ioSuccess.value = null
 
   try {
-    const devRes = await fetch(`${API_BASE}/devices`, {
+    const devRes = await apiFetch(`${API_BASE}/devices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -443,7 +444,7 @@ async function createTestDevice() {
     const createdDevice: Device = await devRes.json()
 
     // Create software entry so experiment validation can match software_name.
-    const swRes = await fetch(`${API_BASE}/software`, {
+    const swRes = await apiFetch(`${API_BASE}/software`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'PI_RED' }),
@@ -454,7 +455,7 @@ async function createTestDevice() {
     }
     const createdSoftware = await swRes.json()
 
-    const configRes = await fetch(`${API_BASE}/configs`, {
+    const configRes = await apiFetch(`${API_BASE}/configs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -490,7 +491,7 @@ async function createTestDevice() {
     ]
 
     for (const inputDef of inputs) {
-      const inputRes = await fetch(`${API_BASE}/inputs`, {
+      const inputRes = await apiFetch(`${API_BASE}/inputs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -512,7 +513,7 @@ async function createTestDevice() {
     ]
 
     for (const outputDef of outputs) {
-      const outputRes = await fetch(`${API_BASE}/outputs`, {
+      const outputRes = await apiFetch(`${API_BASE}/outputs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -543,7 +544,7 @@ async function deleteDevice() {
   showDeleteModal.value = false
   deleteConfirmText.value = ''
   try {
-    const res = await fetch(`${API_BASE}/devices/${selected.value.id}`, { method: 'DELETE' })
+    const res = await apiFetch(`${API_BASE}/devices/${selected.value.id}`, { method: 'DELETE' })
     if (!res.ok) {
       const data = await res.json()
       throw new Error(data?.detail ?? `Delete failed (${res.status})`)
@@ -584,13 +585,13 @@ async function save() {
   try {
     let res: Response
     if (isNew.value) {
-      res = await fetch(`${API_BASE}/devices`, {
+      res = await apiFetch(`${API_BASE}/devices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
     } else {
-      res = await fetch(`${API_BASE}/devices/${selected.value!.id}`, {
+      res = await apiFetch(`${API_BASE}/devices/${selected.value!.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

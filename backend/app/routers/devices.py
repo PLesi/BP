@@ -6,9 +6,9 @@ from sqlmodel import select
 from ..models import Device, DeviceCreate, DevicePublic, DeviceDetailPublic, Config, Input, Output, TimeLimit, InputLimit
 from ..db import get_session
 from ..services.device_services import get_devices_with_details
+from ..services.services import verify_admin_api_key
 
-
-router = APIRouter(prefix="/devices", tags=["devices"])
+router = APIRouter(prefix="/devices", tags=["devices"], dependencies=[Depends(verify_admin_api_key)])
 
 @router.get("", response_model=list[DeviceDetailPublic])  
 async def get_devices(session: AsyncSession = Depends(get_session)):

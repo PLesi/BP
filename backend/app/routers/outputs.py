@@ -4,8 +4,9 @@ from sqlmodel import select
 
 from ..models import Output, OutputCreate, OutputPublic, Config
 from ..db import get_session
+from ..services.services import verify_admin_api_key
 
-router = APIRouter(prefix="/outputs", tags=["outputs"])
+router = APIRouter(prefix="/outputs", tags=["outputs"], dependencies=[Depends(verify_admin_api_key)])
 
 def check_if_output_exists(output: Output | None):
     if not output:

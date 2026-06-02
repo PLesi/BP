@@ -4,8 +4,9 @@ from sqlmodel import select
 
 from ..models import Software, SoftwareCreate, SoftwarePublic
 from ..db import get_session
+from ..services.services import verify_admin_api_key
 
-router = APIRouter(prefix="/software", tags=["software"])
+router = APIRouter(prefix="/software", tags=["software"], dependencies=[Depends(verify_admin_api_key)])
 
 @router.get("",response_model=list[SoftwarePublic])
 async def get_software(session: AsyncSession = Depends(get_session)):

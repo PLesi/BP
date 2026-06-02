@@ -5,9 +5,9 @@ from sqlmodel import select
 
 from ..models import Input, InputCreate, InputPublic, Config, InputLimit
 from ..db import get_session
-from ..services.services import RESERVED_KEYWORDS
+from ..services.services import RESERVED_KEYWORDS, verify_admin_api_key
 
-router = APIRouter(prefix="/inputs", tags=["inputs"])
+router = APIRouter(prefix="/inputs", tags=["inputs"], dependencies=[Depends(verify_admin_api_key)])
 
 def check_if_input_exists(input: Input | None):
     if not input:

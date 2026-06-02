@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 import json
 import os
@@ -46,6 +47,10 @@ _players: dict[str, Any] = {}
 
 def _grant_key(token: str) -> str:
     return f"webrtc:grant:{token}"
+
+
+def _device_token_key(device_name: str) -> str:
+    return f"webrtc:device_token:{device_name}"
 
 
 def _env_int(name: str, default: int) -> int:
@@ -199,6 +204,7 @@ def _issue_grant(device_name: str, ttl: int = GRANT_TTL) -> tuple[str, str]:
         ttl,
         json.dumps({"device_name": device_name, "expires_at": expires_str, "revoked": False}),
     )
+    redis_client.setex(_device_token_key(device_name), ttl, token)
     return token, expires_str
 
 
@@ -222,6 +228,11 @@ async def _check_device_exists(session: AsyncSession, device_name: str):
 
 @router.post("/devices/{device_name}/webrtc/grants", response_model=WebRTCGrantPublic)
 async def create_webrtc_grant(device_name: str, _: None = Depends(verify_api_key)):
+    if not redis_client.exists(f"device_running:{device_name}"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No running experiment found for this device",
+        )
     token, expires_at = _issue_grant(device_name)
     return {"device_name": device_name, "grant_token": token, "expires_at": expires_at}
 
@@ -240,6 +251,7 @@ async def refresh_webrtc_grant(
         )
 
     redis_client.delete(_grant_key(body.grant_token))
+    redis_client.delete(_device_token_key(device_name))
     token, expires_at = _issue_grant(device_name)
     return {"device_name": device_name, "grant_token": token, "expires_at": expires_at}
 
@@ -251,6 +263,7 @@ async def revoke_webrtc_grant(body: WebRTCGrantRevokeReq, _: None = Depends(veri
         data = json.loads(raw)
         if dev := data.get("device_name"):
             await _close_peer(dev)
+            redis_client.delete(_device_token_key(dev))
     redis_client.delete(_grant_key(body.grant_token))
     return {"status": "revoked"}
 
@@ -339,4 +352,25 @@ async def stop_webrtc_offer(
 
     await _close_peer(device_name)
     redis_client.delete(_grant_key(token))
+    redis_client.delete(_device_token_key(device_name))
     return {"status": "revoked"}
+
+
+async def grant_watchdog():
+    """Periodically close WebRTC streams whose grant has expired or whose
+    associated experiment is no longer running."""
+    while True:
+        await asyncio.sleep(5)
+        for device_name in list(_connections.keys()):
+            token = redis_client.get(_device_token_key(device_name))
+            grant_valid = False
+            if token:
+                raw = redis_client.get(_grant_key(token))
+                if raw:
+                    grant = json.loads(raw)
+                    grant_valid = not grant.get("revoked", False)
+
+            experiment_running = bool(redis_client.exists(f"device_running:{device_name}"))
+
+            if not grant_valid or not experiment_running:
+                await _close_peer(device_name)

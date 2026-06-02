@@ -3,10 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from .db import init_db
 from .routers import devices, configs, software, inputs, outputs, experiments, server, webrtc
+import asyncio
 
 async def lifespan(app: FastAPI):
     await init_db()
+    watchdog = asyncio.create_task(webrtc.grant_watchdog())
     yield
+    watchdog.cancel()
+    try:
+        await watchdog
+    except asyncio.CancelledError:
+        pass
     print("end")
 
 app = FastAPI(lifespan=lifespan)

@@ -10,6 +10,7 @@ interface Software {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
+import { apiFetch } from '@/lib/api'
 
 const list = ref<Software[]>([])
 const selected = ref<Software | null>(null)
@@ -21,7 +22,7 @@ const success = ref(false)
 const name = ref('')
 
 async function fetchAll() {
-  const res = await fetch(`${API_BASE}/software`)
+  const res = await apiFetch(`${API_BASE}/software`)
   list.value = await res.json()
 }
 
@@ -55,7 +56,7 @@ async function save() {
     const url = isNew.value
       ? `${API_BASE}/software`
       : `${API_BASE}/software/${selected.value!.id}`
-    const res = await fetch(url, {
+    const res = await apiFetch(url, {
       method: isNew.value ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: name.value.trim() }),
