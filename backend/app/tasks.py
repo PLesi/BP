@@ -231,18 +231,9 @@ async def run_experiment(experiment: dict):
     stdout_seen = False
 
     async def send_running_with_chart(data: dict):
-        await ws_manager.send_message(task_id, {
-            "status": "running",
-            "device_id": device_id,
-            "data": data
-        })
         chart_point = _make_point(data) if isinstance(data, dict) else None
         if chart_point:
-            await ws_manager.send_message(task_id, {
-                "status": "chart_point",
-                "device_id": device_id,
-                "data": chart_point,
-            })
+            await ws_manager.send_message(task_id, chart_point)
 
     async def stream_stdout():
         nonlocal stdout_seen, out_columns
@@ -272,37 +263,19 @@ async def run_experiment(experiment: dict):
                         chart_point = _parse_point(out_line, elapsed, out_columns)
                     if chart_point:
                         output_history.append(chart_point)
-                        await ws_manager.send_message(task_id, {
-                            "status": "running",
-                            "device_id": device_id,
-                            "data": {**data, "out_line": chart_point},
-                        })
-                    else:
-                        await ws_manager.send_message(task_id, {
-                            "status": "running",
-                            "device_id": device_id,
-                            "data": data,
-                        })
+                        await ws_manager.send_message(task_id, chart_point)
                 else:
                     # Heartbeat / direct measurement — extract clean point if present
                     chart_point = _make_point(data) if isinstance(data, dict) else None
                     if chart_point:
                         output_history.append(chart_point)
-                    await ws_manager.send_message(task_id, {
-                        "status": "running",
-                        "device_id": device_id,
-                        "data": data,
-                    })
+                        await ws_manager.send_message(task_id, chart_point)
             except json.JSONDecodeError:
                 elapsed = round(asyncio.get_running_loop().time() - run_start_ts, 2)
                 chart_point = _parse_point(output, elapsed, out_columns)
-                await ws_manager.send_message(task_id, {
-                    "status": "running",
-                    "device_id": device_id,
-                    "output": output
-                })
                 if chart_point:
                     output_history.append(chart_point)
+                    await ws_manager.send_message(task_id, chart_point)
 
     async def stream_output_file_fallback():
         # nothing on stdout after 3s — read output file directly
@@ -337,15 +310,10 @@ async def run_experiment(experiment: dict):
                         line = raw_line.strip()
                         if not line:
                             continue
-                        payload = {
-                            "time": elapsed,
-                            "out_line": line,
-                            "source": "output_file",
-                        }
-                        await send_running_with_chart(payload)
                         chart_point = _parse_point(line, elapsed, out_columns)
                         if chart_point:
                             output_history.append(chart_point)
+                            await ws_manager.send_message(task_id, chart_point)
 
             await asyncio.sleep(0.5)
 
