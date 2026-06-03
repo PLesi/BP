@@ -301,7 +301,7 @@ async function addInput() {
     ioError.value = 'Input name and type are required.'
     return
   }
-  if (inputForm.value.limit_enabled && (!inputForm.value.min || !inputForm.value.max)) {
+  if (inputForm.value.limit_enabled && (inputForm.value.min === '' || inputForm.value.max === '')) {
     ioError.value = 'Input min and max are required when limit is enabled.'
     return
   }
