@@ -638,12 +638,12 @@ onMounted(fetchAll)
 </script>
 
 <template>
-  <div class="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-[0_0_0_1px_rgba(59,130,246,0.08)] overflow-hidden flex flex-col md:flex-row h-[calc(100vh-140px)]">
+  <div class="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/80 shadow-[0_0_0_1px_rgba(59,130,246,0.08)] overflow-hidden flex flex-col md:flex-row h-[calc(100vh-140px)]">
     <!-- Mobile topbar -->
-    <div class="md:hidden flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/70">
-      <span class="text-zinc-300 text-sm font-medium">Devices</span>
+    <div class="md:hidden flex items-center justify-between px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-gray-100/70 dark:bg-zinc-950/70">
+      <span class="text-zinc-700 dark:text-zinc-300 text-sm font-medium">Devices</span>
       <button
-        class="text-zinc-400 hover:text-white text-xs border border-zinc-700 rounded px-2 py-1"
+        class="text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white text-xs border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1"
         @click="sidebarOpen = !sidebarOpen"
       >
         {{ sidebarOpen ? 'Hide' : 'Show list' }}
@@ -651,28 +651,28 @@ onMounted(fetchAll)
     </div>
 
     <aside
-      class="border-r border-zinc-800 flex flex-col bg-zinc-950/70 md:w-1/4"
+      class="border-r border-zinc-200 dark:border-zinc-800 flex flex-col bg-gray-50 dark:bg-zinc-950/70 md:w-1/4"
       :class="sidebarOpen ? 'flex' : 'hidden md:flex'"
     >
-      <div class="p-4 border-b border-zinc-800 space-y-2">
+      <div class="p-4 border-b border-zinc-200 dark:border-zinc-800 space-y-2">
         <Button class="w-full bg-blue-600 hover:bg-blue-500 text-white" @click="clickNew">
           + New Device
         </Button>
-        <Button class="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-300 text-xs" @click="createTestDevice">
+        <Button class="w-full bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-xs" @click="createTestDevice">
           ⚡ Quick Test Device
         </Button>
       </div>
       <nav class="flex-1 overflow-y-auto p-2">
         <ul class="space-y-1">
-          <li v-if="devices.length === 0" class="text-zinc-500 text-sm p-3">
+          <li v-if="devices.length === 0" class="text-zinc-400 dark:text-zinc-500 text-sm p-3">
             No devices yet.
           </li>
           <li v-for="device in devices" :key="device.id">
             <button
               class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors border border-transparent"
               :class="selected?.id === device.id && !isNew
-                ? 'bg-blue-600/20 border-blue-500/40 text-blue-100'
-                : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'"
+                ? 'bg-blue-600/20 border-blue-500/40 text-blue-700 dark:text-blue-100'
+                : 'text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'"
               @click="selectDevice(device)"
             >
               {{ device.name }}
@@ -684,13 +684,13 @@ onMounted(fetchAll)
     </aside>
 
     <section class="flex-1 p-8 overflow-y-auto">
-      <div v-if="!selected && !isNew" class="flex items-center justify-center h-full text-zinc-500 text-sm">
+      <div v-if="!selected && !isNew" class="flex items-center justify-center h-full text-zinc-400 dark:text-zinc-500 text-sm">
         Select a device or click <span class="mx-1 text-blue-300 font-medium cursor-pointer hover:underline" @click="clickNew">+ New Device</span>.
       </div>
 
       <div v-else class="max-w-2xl space-y-6">
         <div class="flex items-center justify-between">
-          <h2 class="text-xl font-semibold text-white">
+          <h2 class="text-xl font-semibold text-zinc-900 dark:text-white">
             {{ isNew ? 'New Device' : selected?.name }}
           </h2>
           <div class="flex gap-2">
@@ -713,7 +713,7 @@ onMounted(fetchAll)
             <template v-else>
               <Button
                 variant="outline"
-                class="border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+                class="border-zinc-300 dark:border-zinc-600 bg-gray-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-100 hover:bg-gray-200 dark:hover:bg-zinc-700"
                 @click="cancelEdit"
                 :disabled="loading"
               >
@@ -726,91 +726,91 @@ onMounted(fetchAll)
           </div>
         </div>
 
-        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 space-y-4">
-          <h3 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Device Info</h3>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50 p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Device Info</h3>
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5 col-span-2">
-              <Label class="text-zinc-400 text-sm">Name</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Name</Label>
               <Input
                 v-model="form.name"
                 placeholder="Device name"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
             <div class="space-y-1.5 col-span-2">
-              <Label class="text-zinc-400 text-sm">SLX Model</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">SLX Model</Label>
               <Input
                 v-model="form.slx_model"
                 placeholder="e.g. MyModel.slx"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
             <div class="space-y-1.5 col-span-2">
-              <Label class="text-zinc-400 text-sm">Device Type</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Device Type</Label>
               <Input
                 v-model="form.device_type"
                 placeholder="e.g. sensor, actuator"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
             <div class="space-y-1.5">
-              <Label class="text-zinc-400 text-sm">Maintenance Start</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Maintenance Start</Label>
               <Input
                 type="time"
                 v-model="form.maintenance_start"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white disabled:opacity-60 disabled:cursor-default"
               />
             </div>
             <div class="space-y-1.5">
-              <Label class="text-zinc-400 text-sm">Maintenance End</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Maintenance End</Label>
               <Input
                 type="time"
                 v-model="form.maintenance_end"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white disabled:opacity-60 disabled:cursor-default"
               />
             </div>
           </div>
         </div>
 
-        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 space-y-4">
-          <h3 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Configuration</h3>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50 p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Configuration</h3>
 
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <Label class="text-zinc-400 text-sm">Port</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Port</Label>
               <Input
                 v-model="form.port"
                 placeholder="/dev/ttyUSB0"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
             <div class="space-y-1.5">
-              <Label class="text-zinc-400 text-sm">Output Path</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Output Path</Label>
               <Input
                 v-model="form.output_path"
                 placeholder="Optional"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
             <div class="space-y-1.5 col-span-2">
-              <Label class="text-zinc-400 text-sm">Software</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Software</Label>
               <Select v-model="form.software_choice" :disabled="!isEditing">
-                <SelectTrigger class="bg-zinc-900 border-zinc-700 text-white">
+                <SelectTrigger class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white">
                   <SelectValue placeholder="Select software" />
                 </SelectTrigger>
-                <SelectContent class="max-h-60 overflow-y-auto bg-zinc-900 border-zinc-700 text-white">
+                <SelectContent class="max-h-60 overflow-y-auto bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white">
                   <SelectItem :value="NONE_SOFTWARE_VALUE">None</SelectItem>
                   <SelectItem v-for="sw in softwareList" :key="sw.id" :value="String(sw.id)">
                     {{ sw.name }}
@@ -821,16 +821,16 @@ onMounted(fetchAll)
             </div>
 
             <div v-if="form.software_choice === OTHER_SOFTWARE_VALUE" class="space-y-1.5 col-span-2">
-              <Label class="text-zinc-400 text-sm">New Software Name</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">New Software Name</Label>
               <Input
                 v-model="form.software_other_name"
                 placeholder="Type software name"
                 :disabled="!isEditing"
-                class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
               />
             </div>
 
-            <div class="col-span-2 pt-2 border-t border-zinc-800">
+            <div class="col-span-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
               <div class="flex items-center gap-2 mb-3">
                 <input
                   id="time-limit-enabled"
@@ -839,29 +839,29 @@ onMounted(fetchAll)
                   :disabled="!isEditing"
                   class="accent-blue-500"
                 >
-                <Label for="time-limit-enabled" class="text-zinc-300 text-sm">Enable Time Limit</Label>
+                <Label for="time-limit-enabled" class="text-zinc-700 dark:text-zinc-300 text-sm">Enable Time Limit</Label>
               </div>
               <div v-if="form.time_limit_enabled" class="grid grid-cols-2 gap-4">
                 <div class="space-y-1.5">
-                  <Label class="text-zinc-400 text-sm">Period</Label>
+                  <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Period</Label>
                   <Input
                     v-model="form.period"
                     type="number"
                     min="0"
                     placeholder="e.g. 60"
                     :disabled="!isEditing"
-                    class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                    class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
                   />
                 </div>
                 <div class="space-y-1.5">
-                  <Label class="text-zinc-400 text-sm">Frequency</Label>
+                  <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Frequency</Label>
                   <Input
                     v-model="form.frequency"
                     type="number"
                     min="0"
                     placeholder="e.g. 5"
                     :disabled="!isEditing"
-                    class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
+                    class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default"
                   />
                 </div>
               </div>
@@ -869,47 +869,47 @@ onMounted(fetchAll)
           </div>
         </div>
 
-        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 space-y-4">
-          <h3 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Inputs</h3>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50 p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Inputs</h3>
 
           <div v-if="selected?.config?.inputs?.length" class="space-y-2">
             <div
               v-for="inp in selected.config.inputs"
               :key="inp.id"
-              class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2"
+              class="flex items-center justify-between rounded-lg border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 px-3 py-2"
             >
-              <div class="text-sm text-zinc-200">
+              <div class="text-sm text-zinc-800 dark:text-zinc-200">
                 <span class="font-medium">{{ inp.name }}</span>
-                <span class="text-zinc-500"> ({{ inp.type }})</span>
-                <span v-if="inp.input_limit" class="text-zinc-500"> [{{ inp.input_limit.min }} - {{ inp.input_limit.max }}]</span>
+                <span class="text-zinc-500 dark:text-zinc-500"> ({{ inp.type }})</span>
+                <span v-if="inp.input_limit" class="text-zinc-500 dark:text-zinc-500"> [{{ inp.input_limit.min }} - {{ inp.input_limit.max }}]</span>
               </div>
               <Button
                 v-if="isEditing"
                 variant="outline"
-                class="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                class="h-8 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
                 @click="removeInput(inp.id)"
               >
                 Remove
               </Button>
             </div>
           </div>
-          <p v-else class="text-sm text-zinc-500">No inputs yet.</p>
+          <p v-else class="text-sm text-zinc-400 dark:text-zinc-500">No inputs yet.</p>
 
-          <div v-if="isEditing" class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+          <div v-if="isEditing" class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/60 p-4 space-y-3">
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Input Name</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Input Name</Label>
                 <Input
                   v-model="inputForm.name"
                   placeholder="e.g. fan"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
+                  class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                 />
               </div>
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Input Type</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Input Type</Label>
                 <select
                   v-model="inputForm.type"
-                  class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+                  class="w-full rounded-md bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white text-sm px-3 h-9"
                 >
                   <option value="" disabled>Select type</option>
                   <option value="float">float</option>
@@ -921,10 +921,10 @@ onMounted(fetchAll)
             </div>
 
             <div class="space-y-1.5">
-              <Label class="text-zinc-400 text-sm">Workspace</Label>
+              <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Workspace</Label>
               <select
                 v-model="inputForm.workspace"
-                class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+                class="w-full rounded-md bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white text-sm px-3 h-9"
               >
                 <option value="inputs">inputs</option>
                 <option value="regparams">regparams</option>
@@ -933,32 +933,32 @@ onMounted(fetchAll)
 
             <div class="flex items-center gap-2">
               <input id="input-limit-enabled" v-model="inputForm.limit_enabled" type="checkbox" class="accent-blue-500">
-              <Label for="input-limit-enabled" class="text-zinc-300 text-sm">Add input limit</Label>
+              <Label for="input-limit-enabled" class="text-zinc-700 dark:text-zinc-300 text-sm">Add input limit</Label>
             </div>
 
             <div v-if="inputForm.limit_enabled" class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Min</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Min</Label>
                 <Input
                   v-model="inputForm.min"
                   type="number"
                   placeholder="e.g. 0"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
+                  class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                 />
               </div>
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Max</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Max</Label>
                 <Input
                   v-model="inputForm.max"
                   type="number"
                   placeholder="e.g. 100"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
+                  class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                 />
               </div>
             </div>
 
             <Button class="bg-blue-600 text-white hover:bg-blue-500" @click="addInput">Add Input</Button>
-            <p class="text-xs text-zinc-500">Input is queued and saved when you press Save.</p>
+            <p class="text-xs text-zinc-400 dark:text-zinc-500">Input is queued and saved when you press Save.</p>
           </div>
         </div>
 
@@ -967,60 +967,60 @@ onMounted(fetchAll)
           <div
             v-for="(inp, index) in pendingInputs"
             :key="`${inp.name}-${inp.type}-${index}`"
-            class="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2"
+            class="flex items-center justify-between rounded-md border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 px-3 py-2"
           >
-            <div class="text-sm text-zinc-200">
+            <div class="text-sm text-zinc-800 dark:text-zinc-200">
               <span class="font-medium">{{ inp.name }}</span>
               <span class="text-zinc-500"> ({{ inp.type }})</span>
               <span v-if="inp.input_limit" class="text-zinc-500"> [{{ inp.input_limit.min }} - {{ inp.input_limit.max }}]</span>
-              <span class="ml-2 text-blue-300 text-xs">pending</span>
+              <span class="ml-2 text-blue-500 dark:text-blue-300 text-xs">pending</span>
             </div>
-            <Button variant="outline" class="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800" @click="removePendingInput(index)">
+            <Button variant="outline" class="h-8 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800" @click="removePendingInput(index)">
               Remove
             </Button>
           </div>
         </div>
 
-        <div class="rounded-xl border border-zinc-800 bg-zinc-950/50 p-5 space-y-4">
-          <h3 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Outputs</h3>
+        <div class="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-950/50 p-5 space-y-4">
+          <h3 class="text-sm font-semibold text-blue-600 dark:text-blue-300 uppercase tracking-wide">Outputs</h3>
 
           <div v-if="selected?.config?.outputs?.length" class="space-y-2">
             <div
               v-for="out in selected.config.outputs"
               :key="out.id"
-              class="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2"
+              class="flex items-center justify-between rounded-lg border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 px-3 py-2"
             >
-              <div class="text-sm text-zinc-200">
+              <div class="text-sm text-zinc-800 dark:text-zinc-200">
                 <span class="font-medium">{{ out.name }}</span>
                 <span class="text-zinc-500"> ({{ out.type }})</span>
               </div>
               <Button
                 v-if="isEditing"
                 variant="outline"
-                class="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                class="h-8 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
                 @click="removeOutput(out.id)"
               >
                 Remove
               </Button>
             </div>
           </div>
-          <p v-else class="text-sm text-zinc-500">No outputs yet.</p>
+          <p v-else class="text-sm text-zinc-400 dark:text-zinc-500">No outputs yet.</p>
 
-          <div v-if="isEditing" class="rounded-lg border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+          <div v-if="isEditing" class="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/60 p-4 space-y-3">
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Output Name</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Output Name</Label>
                 <Input
                   v-model="outputForm.name"
                   placeholder="e.g. light_intensity"
-                  class="bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500"
+                  class="bg-white dark:bg-zinc-900 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
                 />
               </div>
               <div class="space-y-1.5">
-                <Label class="text-zinc-400 text-sm">Output Type</Label>
+                <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Output Type</Label>
                 <select
                   v-model="outputForm.type"
-                  class="w-full rounded-md bg-zinc-900 border border-zinc-700 text-white text-sm px-3 h-9"
+                  class="w-full rounded-md bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white text-sm px-3 h-9"
                 >
                   <option value="" disabled>Select type</option>
                   <option value="float">float</option>
@@ -1032,7 +1032,7 @@ onMounted(fetchAll)
             </div>
 
             <Button class="bg-blue-600 text-white hover:bg-blue-500" @click="addOutput">Add Output</Button>
-            <p class="text-xs text-zinc-500">Output is queued and saved when you press Save.</p>
+            <p class="text-xs text-zinc-400 dark:text-zinc-500">Output is queued and saved when you press Save.</p>
           </div>
         </div>
 
@@ -1041,23 +1041,23 @@ onMounted(fetchAll)
           <div
             v-for="(out, index) in pendingOutputs"
             :key="`${out.name}-${out.type}-${index}`"
-            class="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2"
+            class="flex items-center justify-between rounded-md border border-zinc-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 px-3 py-2"
           >
-            <div class="text-sm text-zinc-200">
+            <div class="text-sm text-zinc-800 dark:text-zinc-200">
               <span class="font-medium">{{ out.name }}</span>
               <span class="text-zinc-500"> ({{ out.type }})</span>
-              <span class="ml-2 text-blue-300 text-xs">pending</span>
+              <span class="ml-2 text-blue-500 dark:text-blue-300 text-xs">pending</span>
             </div>
-            <Button variant="outline" class="h-8 border-zinc-700 text-zinc-300 hover:bg-zinc-800" @click="removePendingOutput(index)">
+            <Button variant="outline" class="h-8 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800" @click="removePendingOutput(index)">
               Remove
             </Button>
           </div>
         </div>
 
-        <p v-if="saveError" class="text-sm text-red-400">{{ saveError }}</p>
-        <p v-if="saveSuccess" class="text-sm text-blue-300">Saved successfully.</p>
-        <p v-if="ioError" class="text-sm text-red-400">{{ ioError }}</p>
-        <p v-if="ioSuccess" class="text-sm text-blue-300">{{ ioSuccess }}</p>
+        <p v-if="saveError" class="text-sm text-red-500 dark:text-red-400">{{ saveError }}</p>
+        <p v-if="saveSuccess" class="text-sm text-blue-600 dark:text-blue-300">Saved successfully.</p>
+        <p v-if="ioError" class="text-sm text-red-500 dark:text-red-400">{{ ioError }}</p>
+        <p v-if="ioSuccess" class="text-sm text-blue-600 dark:text-blue-300">{{ ioSuccess }}</p>
       </div>
     </section>
   </div>
@@ -1069,25 +1069,25 @@ onMounted(fetchAll)
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       @click.self="showDeleteModal = false"
     >
-      <div class="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900 p-6 shadow-2xl space-y-5">
-        <h3 class="text-lg font-semibold text-white">Delete Device</h3>
-        <p class="text-sm text-zinc-400">
+      <div class="w-full max-w-md rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-6 shadow-2xl space-y-5">
+        <h3 class="text-lg font-semibold text-zinc-900 dark:text-white">Delete Device</h3>
+        <p class="text-sm text-zinc-600 dark:text-zinc-400">
           This will permanently delete
-          <span class="font-semibold text-white">{{ selected?.name }}</span>
+          <span class="font-semibold text-zinc-900 dark:text-white">{{ selected?.name }}</span>
           and all its configuration, inputs, and outputs.
         </p>
-        <p class="text-sm text-zinc-400">
-          Type <span class="font-mono font-bold text-red-400">DELETE</span> to confirm.
+        <p class="text-sm text-zinc-600 dark:text-zinc-400">
+          Type <span class="font-mono font-bold text-red-500 dark:text-red-400">DELETE</span> to confirm.
         </p>
         <input
           v-model="deleteConfirmText"
           placeholder="Type DELETE"
-          class="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-red-500"
+          class="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-gray-50 dark:bg-zinc-800 px-3 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-red-500"
         />
         <div class="flex justify-end gap-3">
           <Button
             variant="outline"
-            class="border-zinc-600 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+            class="border-zinc-300 dark:border-zinc-600 bg-gray-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-100 hover:bg-gray-200 dark:hover:bg-zinc-700"
             @click="showDeleteModal = false; deleteConfirmText = ''"
           >
             Cancel

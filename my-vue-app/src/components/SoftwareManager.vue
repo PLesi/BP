@@ -74,19 +74,19 @@ onMounted(fetchAll)
 </script>
 
 <template>
-  <div class="rounded-xl border border-zinc-700 bg-zinc-900 overflow-hidden flex h-[calc(100vh-130px)]">
+  <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 overflow-hidden flex h-[calc(100vh-130px)]">
     <!-- Left -->
-    <aside class="w-1/4 border-r border-zinc-700 flex flex-col">
-      <div class="p-4 border-b border-zinc-700">
-        <Button class="w-full bg-zinc-700 hover:bg-zinc-600 text-white" @click="clickNew">+ New Software</Button>
+    <aside class="w-1/4 border-r border-zinc-200 dark:border-zinc-700 flex flex-col">
+      <div class="p-4 border-b border-zinc-200 dark:border-zinc-700">
+        <Button class="w-full bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-900 dark:text-white" @click="clickNew">+ New Software</Button>
       </div>
       <nav class="flex-1 overflow-y-auto p-2">
         <ul class="space-y-0.5">
-          <li v-if="list.length === 0" class="text-zinc-500 text-sm p-3">No software yet.</li>
+          <li v-if="list.length === 0" class="text-zinc-400 dark:text-zinc-500 text-sm p-3">No software yet.</li>
           <li v-for="sw in list" :key="sw.id">
             <button
               class="w-full text-left px-3 py-2 rounded-lg text-sm transition-colors"
-              :class="selected?.id === sw.id && !isNew ? 'bg-zinc-700 text-white' : 'text-zinc-300 hover:bg-zinc-800 hover:text-white'"
+              :class="selected?.id === sw.id && !isNew ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-900 dark:text-white' : 'text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white'"
               @click="select_(sw)"
             >{{ sw.name }}</button>
           </li>
@@ -96,28 +96,28 @@ onMounted(fetchAll)
 
     <!-- Right -->
     <section class="flex-1 p-8 overflow-y-auto">
-      <div v-if="!selected && !isNew" class="flex items-center justify-center h-full text-zinc-500 text-sm">
-        Select software or click <span class="mx-1 text-zinc-300 font-medium">+ New Software</span>.
+      <div v-if="!selected && !isNew" class="flex items-center justify-center h-full text-zinc-400 dark:text-zinc-500 text-sm">
+        Select software or click <span class="mx-1 text-zinc-600 dark:text-zinc-300 font-medium">+ New Software</span>.
       </div>
       <div v-else class="max-w-sm space-y-5">
         <div class="flex items-center justify-between">
-          <h2 class="text-lg font-semibold text-white">{{ isNew ? 'New Software' : selected?.name }}</h2>
+          <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">{{ isNew ? 'New Software' : selected?.name }}</h2>
           <div class="flex gap-2">
             <template v-if="!isEditing">
-              <Button variant="outline" class="border-zinc-600 text-zinc-300 hover:bg-zinc-800" @click="isEditing = true">Edit</Button>
+              <Button variant="outline" class="border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800" @click="isEditing = true">Edit</Button>
             </template>
             <template v-else>
-              <Button variant="outline" class="border-zinc-600 text-zinc-300 hover:bg-zinc-800" @click="cancel" :disabled="loading">Cancel</Button>
-              <Button class="bg-white text-zinc-900 hover:bg-zinc-200" @click="save" :disabled="loading">{{ loading ? 'Saving...' : 'Save' }}</Button>
+              <Button variant="outline" class="border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800" @click="cancel" :disabled="loading">Cancel</Button>
+              <Button class="bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-200" @click="save" :disabled="loading">{{ loading ? 'Saving...' : 'Save' }}</Button>
             </template>
           </div>
         </div>
         <div class="space-y-1.5">
-          <Label class="text-zinc-400 text-sm">Name</Label>
-          <Input v-model="name" placeholder="Software name" :disabled="!isEditing" class="bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default" />
+          <Label class="text-zinc-500 dark:text-zinc-400 text-sm">Name</Label>
+          <Input v-model="name" placeholder="Software name" :disabled="!isEditing" class="bg-gray-50 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 disabled:opacity-60 disabled:cursor-default" />
         </div>
-        <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
-        <p v-if="success" class="text-sm text-green-400">Saved successfully.</p>
+        <p v-if="error" class="text-sm text-red-500 dark:text-red-400">{{ error }}</p>
+        <p v-if="success" class="text-sm text-green-600 dark:text-green-400">Saved successfully.</p>
       </div>
     </section>
   </div>
