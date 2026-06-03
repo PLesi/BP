@@ -32,6 +32,7 @@ interface ConfigInput {
   id: number
   type: string
   name: string
+  workspace: string
   input_limit: InputLimit | null
 }
 
@@ -881,7 +882,13 @@ onMounted(fetchAll)
               <div class="text-sm text-zinc-800 dark:text-zinc-200">
                 <span class="font-medium">{{ inp.name }}</span>
                 <span class="text-zinc-500 dark:text-zinc-500"> ({{ inp.type }})</span>
-                <span v-if="inp.input_limit" class="text-zinc-500 dark:text-zinc-500"> [{{ inp.input_limit.min }} - {{ inp.input_limit.max }}]</span>
+                <span v-if="inp.input_limit" class="text-zinc-500 dark:text-zinc-500"> [{{ inp.input_limit.min }} – {{ inp.input_limit.max }}]</span>
+                <span
+                  class="ml-2 text-xs font-medium px-1.5 py-0.5 rounded"
+                  :class="inp.workspace === 'regparams'
+                    ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                    : 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300'"
+                >{{ inp.workspace === 'regparams' ? 'regparams' : 'inputs' }}</span>
               </div>
               <Button
                 v-if="isEditing"
@@ -972,8 +979,14 @@ onMounted(fetchAll)
             <div class="text-sm text-zinc-800 dark:text-zinc-200">
               <span class="font-medium">{{ inp.name }}</span>
               <span class="text-zinc-500"> ({{ inp.type }})</span>
-              <span v-if="inp.input_limit" class="text-zinc-500"> [{{ inp.input_limit.min }} - {{ inp.input_limit.max }}]</span>
-              <span class="ml-2 text-blue-500 dark:text-blue-300 text-xs">pending</span>
+              <span v-if="inp.input_limit" class="text-zinc-500"> [{{ inp.input_limit.min }} – {{ inp.input_limit.max }}]</span>
+              <span
+                class="ml-2 text-xs font-medium px-1.5 py-0.5 rounded"
+                :class="inp.workspace === 'regparams'
+                  ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300'
+                  : 'bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300'"
+              >{{ inp.workspace === 'regparams' ? 'regparams' : 'inputs' }}</span>
+              <span class="ml-1 text-blue-500 dark:text-blue-300 text-xs">pending</span>
             </div>
             <Button variant="outline" class="h-8 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800" @click="removePendingInput(index)">
               Remove
