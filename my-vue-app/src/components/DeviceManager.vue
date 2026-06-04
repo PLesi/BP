@@ -659,9 +659,6 @@ onMounted(fetchAll)
         <Button class="w-full bg-blue-600 hover:bg-blue-500 text-white" @click="clickNew">
           + New Device
         </Button>
-        <Button class="w-full bg-zinc-200 dark:bg-zinc-700 hover:bg-zinc-300 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-300 text-xs" @click="createTestDevice">
-          ⚡ Quick Test Device
-        </Button>
       </div>
       <nav class="flex-1 overflow-y-auto p-2">
         <ul class="space-y-1">
